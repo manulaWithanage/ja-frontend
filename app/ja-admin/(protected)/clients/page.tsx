@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { MOCK_CLIENTS, MockClient, PortalAccess } from "../_mock/data";
+import { jaApi } from "../../../lib/jaApi";
+import type { Client, PortalAccess } from "../../../types/ja-admin";
 
 // ─── Portal Access Badge ──────────────────────────────────────
 const ACCESS_STYLES: Record<PortalAccess, { badge: string; dot: string; label: string }> = {
@@ -11,7 +12,7 @@ const ACCESS_STYLES: Record<PortalAccess, { badge: string; dot: string; label: s
   never_set: { badge: "bg-zinc-500/10 border-zinc-500/20 text-zinc-400", dot: "bg-zinc-500", label: "No Access" },
 };
 
-const STATUS_STYLES = {
+const STATUS_STYLES: Record<string, string> = {
   active: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
   pending: "bg-amber-500/10 border-amber-500/20 text-amber-400",
   inactive: "bg-zinc-500/10 border-zinc-500/20 text-zinc-400",
@@ -19,10 +20,7 @@ const STATUS_STYLES = {
 };
 
 // ─── View Credentials Modal ────────────────────────────────────
-function ViewCredentialsModal({ client, onClose }: { client: MockClient; onClose: () => void }) {
-  const [showPassword, setShowPassword] = useState(false);
-  const password = client.portal.tempPassword ?? "(not set)";
-
+function ViewCredentialsModal({ client, onClose }: { client: Client; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
       <div className="w-full max-w-sm rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
@@ -37,7 +35,6 @@ function ViewCredentialsModal({ client, onClose }: { client: MockClient; onClose
         </div>
 
         <div className="space-y-3">
-          {/* Username */}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-500 mb-1.5">Username / Email</p>
             <div className="flex items-center justify-between gap-2">
@@ -51,35 +48,14 @@ function ViewCredentialsModal({ client, onClose }: { client: MockClient; onClose
             </div>
           </div>
 
-          {/* Password */}
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-500 mb-1.5">Password</p>
-            <div className="flex items-center justify-between gap-2">
-              <code className="text-sm font-mono text-zinc-100 tracking-widest">
-                {showPassword ? password : "•".repeat(Math.min(password.length, 12))}
-              </code>
-              <div className="flex gap-1.5 shrink-0">
-                <button
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-[10px] font-bold text-zinc-400 hover:text-zinc-200 transition"
-                >
-                  {showPassword ? "Hide" : "Reveal"}
-                </button>
-                {showPassword && (
-                  <button
-                    onClick={() => navigator.clipboard.writeText(password)}
-                    className="rounded-lg border border-zinc-700 bg-zinc-800 px-2 py-1 text-[10px] font-bold text-zinc-400 hover:text-zinc-200 transition"
-                  >
-                    Copy
-                  </button>
-                )}
-              </div>
-            </div>
+            <p className="text-sm font-mono text-zinc-400 italic">Password is hashed — use Reset Password to issue a new one.</p>
           </div>
 
-          {client.portal.lastLogin && (
+          {client.last_login && (
             <p className="text-[10px] text-zinc-600 text-center">
-              Last login: {new Date(client.portal.lastLogin).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+              Last login: {new Date(client.last_login).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
             </p>
           )}
         </div>
@@ -94,7 +70,7 @@ function ViewCredentialsModal({ client, onClose }: { client: MockClient; onClose
 
 // ─── Set Password Modal ───────────────────────────────────────
 function SetPasswordModal({ client, onClose, onSave }: {
-  client: MockClient;
+  client: Client;
   onClose: () => void;
   onSave: (id: string, password: string) => void;
 }) {
@@ -102,20 +78,28 @@ function SetPasswordModal({ client, onClose, onSave }: {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) { setError("Must be at least 6 characters"); return; }
     if (password !== confirm) { setError("Passwords do not match"); return; }
-    // TODO: backend — PATCH /api/ja-admin/clients/:id/credentials
-    onSave(client.id, password);
-    setSuccess(true);
-    setTimeout(onClose, 1200);
+    setSaving(true);
+    try {
+      await jaApi.patch(`/clients/${client.id}`, { password });
+      onSave(client.id, password);
+      setSuccess(true);
+      setTimeout(onClose, 1200);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to set password");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95 duration-200">
         <div className="flex items-start justify-between mb-5">
           <div>
             <h3 className="text-sm font-bold text-zinc-100">Set Portal Password</h3>
@@ -139,14 +123,14 @@ function SetPasswordModal({ client, onClose, onSave }: {
               { key: "password", label: "New Password", value: password, set: setPassword },
               { key: "confirm", label: "Confirm Password", value: confirm, set: setConfirm },
             ].map((f) => (
-              <div key={f.key} className="space-y-1.5">
-                <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400">{f.label}</label>
+              <div key={f.key} className="space-y-1.5 group">
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">{f.label}</label>
                 <input
                   type="password"
                   required
                   value={f.value}
                   onChange={(e) => f.set(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-zinc-900/80 px-4 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/20"
+                  className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-4 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20"
                 />
               </div>
             ))}
@@ -154,8 +138,10 @@ function SetPasswordModal({ client, onClose, onSave }: {
             {error && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
 
             <div className="flex gap-3 pt-1">
-              <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800/50 py-2.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition">Cancel</button>
-              <button type="submit" className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 transition">Set Password</button>
+              <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800/50 py-2.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-[0.98] transition">Cancel</button>
+              <button type="submit" disabled={saving} className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 active:scale-[0.98] transition disabled:opacity-60">
+                {saving ? "Setting..." : "Set Password"}
+              </button>
             </div>
           </form>
         )}
@@ -165,37 +151,37 @@ function SetPasswordModal({ client, onClose, onSave }: {
 }
 
 // ─── Create Client Modal ──────────────────────────────────────
-function CreateClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (c: MockClient) => void }) {
+function CreateClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (c: Client) => void }) {
   const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "", password: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: backend — POST /api/ja-admin/clients
-    const newClient: MockClient = {
-      id: `c${Date.now()}`,
-      name: form.name,
-      email: form.email,
-      phone: form.phone,
-      notes: form.notes,
-      status: "pending",
-      createdAt: new Date().toISOString().split("T")[0],
-      lastActive: new Date().toISOString().split("T")[0],
-      assignedJobs: 0,
-      searchRuns: 0,
-      portal: {
-        access: form.password ? "invited" : "never_set",
-        lastLogin: null,
-        tempPassword: form.password || null,
-        inviteSentAt: form.password ? new Date().toISOString().split("T")[0] : null,
-      },
-    };
-    onAdd(newClient);
-    onClose();
+    setSaving(true);
+    setError("");
+    try {
+      const newClient = await jaApi.post<Client>("/clients", {
+        name: form.name,
+        email: form.email,
+        phone: form.phone || undefined,
+        notes: form.notes || undefined,
+        password: form.password || undefined,
+      });
+      onAdd(newClient);
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create client");
+    } finally {
+      setSaving(false);
+    }
   };
 
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-bold text-zinc-100">Create New Client</h3>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition">
@@ -209,38 +195,53 @@ function CreateClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (c:
               { key: "name", label: "Full Name", placeholder: "John Doe", type: "text", full: true },
               { key: "email", label: "Email", placeholder: "john@email.com", type: "email", full: true },
               { key: "phone", label: "Phone", placeholder: "+1 415 555 0100", type: "text", full: false },
-              { key: "password", label: "Temp Password", placeholder: "TJH@2026!", type: "password", full: false },
+              { key: "password", label: "Temp Password", placeholder: "TJH@2026!", type: showPassword ? "text" : "password", full: false },
             ].map((f) => (
-              <div key={f.key} className={`space-y-1.5 ${f.full ? "col-span-2" : "col-span-1"}`}>
-                <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{f.label}</label>
-                <input
-                  type={f.type}
-                  required={f.key === "name" || f.key === "email"}
-                  placeholder={f.placeholder}
-                  value={(form as any)[f.key]}
-                  onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
-                  className="w-full rounded-xl border border-white/10 bg-zinc-900/80 px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/20"
-                />
+              <div key={f.key} className={`space-y-1.5 ${f.full ? "col-span-2" : "col-span-1"} group relative`}>
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">{f.label}</label>
+                <div className="relative">
+                  <input
+                    type={f.type}
+                    required={f.key === "name" || f.key === "email"}
+                    placeholder={f.placeholder}
+                    value={(form as Record<string, string>)[f.key]}
+                    onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                    className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20"
+                  />
+                  {f.key === "password" && form.password.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-zinc-200 transition"
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
 
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Internal Notes</label>
+          <div className="space-y-1.5 group">
+            <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">Internal Notes</label>
             <textarea
               value={form.notes}
               onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
               placeholder="Background, target roles, special requirements..."
               rows={2}
-              className="w-full rounded-xl border border-white/10 bg-zinc-900/80 px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none resize-none transition focus:border-violet-500/40"
+              className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none resize-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80"
             />
           </div>
 
-          <p className="text-[10px] text-zinc-600">Setting a temp password will mark portal as "Invite Sent". Leave blank to configure later.</p>
+          <p className="text-[10px] text-zinc-600">Setting a temp password will mark portal as &ldquo;Invite Sent&rdquo;. Leave blank to configure later.</p>
+
+          {error && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
 
           <div className="flex gap-3 pt-1">
-            <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800/50 py-2.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition">Cancel</button>
-            <button type="submit" className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 transition">Create Account</button>
+            <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800/50 py-2.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-[0.98] transition">Cancel</button>
+            <button type="submit" disabled={saving} className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 active:scale-[0.98] transition disabled:opacity-60">
+              {saving ? "Creating..." : "Create Account"}
+            </button>
           </div>
         </form>
       </div>
@@ -250,13 +251,28 @@ function CreateClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (c:
 
 // ─── Main Page ────────────────────────────────────────────────
 export default function ClientsPage() {
-  const [clients, setClients] = useState<MockClient[]>(MOCK_CLIENTS);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "pending" | "inactive" | "suspended">("all");
   const [showCreate, setShowCreate] = useState(false);
-  const [passwordModal, setPasswordModal] = useState<MockClient | null>(null);
-  const [credentialsModal, setCredentialsModal] = useState<MockClient | null>(null);
+  const [passwordModal, setPasswordModal] = useState<Client | null>(null);
+  const [credentialsModal, setCredentialsModal] = useState<Client | null>(null);
   const [inviteSent, setInviteSent] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await jaApi.get<{ clients: Client[] }>("/clients");
+        setClients(data.clients || []);
+      } catch (err) {
+        console.error("Failed to load clients:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
 
   const filtered = clients.filter((c) => {
     const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase());
@@ -264,20 +280,43 @@ export default function ClientsPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleSetPassword = (id: string, password: string) => {
-    setClients((prev) => prev.map((c) => c.id === id ? { ...c, portal: { ...c.portal, access: "invited", tempPassword: password, inviteSentAt: new Date().toISOString().split("T")[0] } } : c));
+  const handleSetPassword = (id: string) => {
+    // Refresh the client list to get updated portal_access
+    jaApi.get<Client[]>("/clients").then((data) => setClients(Array.isArray(data) ? data : [])).catch(() => {});
   };
 
-  const handleSendInvite = (id: string) => {
-    // TODO: backend — POST /api/ja-admin/clients/:id/send-invite
-    setInviteSent(id);
-    setTimeout(() => setInviteSent(null), 2500);
+  const handleSendInvite = async (id: string) => {
+    try {
+      await jaApi.post(`/clients/${id}`, {});
+      setInviteSent(id);
+      setTimeout(() => setInviteSent(null), 2500);
+    } catch (err) {
+      console.error("Send invite failed:", err);
+    }
   };
 
-  const handleToggleSuspend = (id: string) => {
-    // TODO: backend — PATCH /api/ja-admin/clients/:id/status
-    setClients((prev) => prev.map((c) => c.id === id ? { ...c, status: c.status === "suspended" ? "active" : "suspended" } : c));
+  const handleToggleSuspend = async (id: string, currentStatus: string) => {
+    const newStatus = currentStatus === "suspended" ? "active" : "suspended";
+    try {
+      await jaApi.patch(`/clients/${id}`, { status: newStatus });
+      setClients((prev) => prev.map((c) => c.id === id ? { ...c, status: newStatus as Client["status"] } : c));
+    } catch (err) {
+      console.error("Toggle suspend failed:", err);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-zinc-100">Client Accounts</h1>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 h-28 animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -306,9 +345,9 @@ export default function ClientsPage() {
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: "Portal Active", value: clients.filter(c => c.portal.access === "configured").length, color: "emerald" },
-          { label: "Invite Sent", value: clients.filter(c => c.portal.access === "invited").length, color: "amber" },
-          { label: "No Access", value: clients.filter(c => c.portal.access === "never_set").length, color: "zinc" },
+          { label: "Portal Active", value: clients.filter(c => c.portal_access === "configured").length, color: "emerald" },
+          { label: "Invite Sent", value: clients.filter(c => c.portal_access === "invited").length, color: "amber" },
+          { label: "No Access", value: clients.filter(c => c.portal_access === "never_set").length, color: "zinc" },
           { label: "Suspended", value: clients.filter(c => c.status === "suspended").length, color: "red" },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3">
@@ -345,56 +384,51 @@ export default function ClientsPage() {
           </div>
         ) : (
           filtered.map((client) => {
-            const access = ACCESS_STYLES[client.portal.access];
+            const access = ACCESS_STYLES[client.portal_access];
             const statusStyle = STATUS_STYLES[client.status] || STATUS_STYLES.inactive;
             const isSuspended = client.status === "suspended";
 
             return (
               <div key={client.id} className={`group rounded-2xl border p-5 transition ${isSuspended ? "border-red-500/10 bg-red-500/5" : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700 hover:bg-zinc-900/60"}`}>
                 <div className="flex items-start gap-4">
-                  {/* Avatar */}
                   <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-bold ${isSuspended ? "bg-red-500/10 text-red-400" : "bg-violet-500/15 text-violet-300"}`}>
                     {client.name.charAt(0)}
                   </div>
 
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <h2 className="text-sm font-bold text-zinc-100">{client.name}</h2>
                       <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${statusStyle}`}>
                         {client.status}
                       </span>
-                      {/* Portal access badge */}
                       <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold ${access.badge}`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${access.dot}`} />
                         {access.label}
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-400">{client.email} · {client.phone}</p>
+                    <p className="text-xs text-zinc-400">{client.email} · {client.phone || "—"}</p>
                     {client.notes && <p className="mt-0.5 text-[11px] text-zinc-600 italic truncate max-w-lg">{client.notes}</p>}
                   </div>
 
-                  {/* Right: last login */}
                   <div className="shrink-0 text-right">
-                    {client.portal.lastLogin ? (
+                    {client.last_login ? (
                       <>
                         <p className="text-[10px] font-semibold text-zinc-300">Last login</p>
                         <p className="text-[10px] text-zinc-500">
-                          {new Date(client.portal.lastLogin).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                          {" "}{new Date(client.portal.lastLogin).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                          {new Date(client.last_login).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          {" "}{new Date(client.last_login).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                         </p>
                       </>
                     ) : (
                       <p className="text-[10px] text-zinc-600">Never logged in</p>
                     )}
-                    <p className="text-[10px] text-zinc-600 mt-1">Created {client.createdAt}</p>
+                    <p className="text-[10px] text-zinc-600 mt-1">Created {new Date(client.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
 
                 {/* Actions */}
                 <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-800/50 pt-3">
-                  {/* View Credentials — primary action */}
-                  {client.portal.access !== "never_set" && (
+                  {client.portal_access !== "never_set" && (
                     <button
                       onClick={() => setCredentialsModal(client)}
                       className="inline-flex items-center gap-1.5 rounded-xl bg-violet-500/10 border border-violet-500/20 px-4 py-2 text-[11px] font-bold text-violet-300 hover:bg-violet-500/20 transition"
@@ -408,7 +442,7 @@ export default function ClientsPage() {
                     onClick={() => setPasswordModal(client)}
                     className="rounded-xl border border-zinc-800 bg-zinc-800/30 px-4 py-2 text-[11px] font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition"
                   >
-                    {client.portal.access === "never_set" ? "Set Password" : "Reset Password"}
+                    {client.portal_access === "never_set" ? "Set Password" : "Reset Password"}
                   </button>
 
                   <button
@@ -430,7 +464,7 @@ export default function ClientsPage() {
                   </Link>
 
                   <button
-                    onClick={() => handleToggleSuspend(client.id)}
+                    onClick={() => handleToggleSuspend(client.id, client.status)}
                     className={`ml-auto rounded-xl border px-4 py-2 text-[11px] font-bold transition ${
                       isSuspended
                         ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10"

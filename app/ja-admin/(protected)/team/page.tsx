@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { MOCK_STAFF, MockStaff, StaffRole } from "../_mock/data";
+import { useState, useEffect } from "react";
+import { jaApi } from "../../../lib/jaApi";
+import type { Staff, StaffRole, StaffStatus } from "../../../types/ja-admin";
 
-const STATUS_STYLES = {
+const STATUS_STYLES: Record<StaffStatus, string> = {
   active: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
   pending: "bg-amber-500/10 border-amber-500/20 text-amber-400",
   suspended: "bg-red-500/10 border-red-500/20 text-red-400",
@@ -11,7 +12,7 @@ const STATUS_STYLES = {
 
 // ─── Set Password Modal ───────────────────────────────────────
 function ResetPasswordModal({ staff, onClose, onSave }: {
-  staff: MockStaff;
+  staff: Staff;
   onClose: () => void;
   onSave: (id: string) => void;
 }) {
@@ -19,15 +20,23 @@ function ResetPasswordModal({ staff, onClose, onSave }: {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 8) { setError("Must be at least 8 characters"); return; }
     if (password !== confirm) { setError("Passwords do not match"); return; }
-    // TODO: backend — PATCH /api/ja-admin/team/:id/credentials
-    onSave(staff.id);
-    setSuccess(true);
-    setTimeout(onClose, 1200);
+    setSaving(true);
+    try {
+      await jaApi.patch(`/team/${staff.id}`, { password });
+      onSave(staff.id);
+      setSuccess(true);
+      setTimeout(onClose, 1200);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to reset password");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -56,14 +65,14 @@ function ResetPasswordModal({ staff, onClose, onSave }: {
               { key: "password", label: "New Temporary Password", value: password, set: setPassword },
               { key: "confirm", label: "Confirm Password", value: confirm, set: setConfirm },
             ].map((f) => (
-              <div key={f.key} className="space-y-1.5">
-                <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400">{f.label}</label>
+              <div key={f.key} className="space-y-1.5 group">
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">{f.label}</label>
                 <input
                   type="password"
                   required
                   value={f.value}
                   onChange={(e) => f.set(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-zinc-900/80 px-4 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/20"
+                  className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-4 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20"
                 />
               </div>
             ))}
@@ -71,8 +80,10 @@ function ResetPasswordModal({ staff, onClose, onSave }: {
             {error && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
 
             <div className="flex gap-3 pt-1">
-              <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800/50 py-2.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition">Cancel</button>
-              <button type="submit" className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 transition">Set Password</button>
+              <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800/50 py-2.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-[0.98] transition">Cancel</button>
+              <button type="submit" disabled={saving} className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 active:scale-[0.98] transition disabled:opacity-60">
+                {saving ? "Resetting..." : "Set Password"}
+              </button>
             </div>
           </form>
         )}
@@ -82,27 +93,35 @@ function ResetPasswordModal({ staff, onClose, onSave }: {
 }
 
 // ─── Create Staff Modal ──────────────────────────────────────
-function CreateStaffModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: MockStaff) => void }) {
-  const [form, setForm] = useState({ name: "", email: "", role: "member" as StaffRole });
+function CreateStaffModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: Staff) => void }) {
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "member" as StaffRole });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: backend — POST /api/ja-admin/team
-    const newStaff: MockStaff = {
-      id: `s${Date.now()}`,
-      name: form.name,
-      email: form.email,
-      role: form.role,
-      status: "pending",
-      createdAt: new Date().toISOString().split("T")[0],
-      lastLogin: null,
-    };
-    onAdd(newStaff);
+    setSaving(true);
+    setError("");
+    try {
+      const newStaff = await jaApi.post<Staff>("/team", {
+        name: form.name,
+        email: form.email,
+        password: form.password,
+        role: form.role,
+      });
+      onAdd(newStaff);
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create team member");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-bold text-zinc-100">Add Team Member</h3>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition">
@@ -111,27 +130,40 @@ function CreateStaffModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: 
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Full Name</label>
-            <input required placeholder="e.g. Jane Smith" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} className="w-full rounded-xl border border-white/10 bg-zinc-900/80 px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-violet-500/40" />
+          <div className="space-y-1.5 group">
+            <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">Full Name</label>
+            <input required placeholder="e.g. Jane Smith" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20" />
           </div>
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Email Address</label>
-            <input type="email" required placeholder="name@jateam.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} className="w-full rounded-xl border border-white/10 bg-zinc-900/80 px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-violet-500/40" />
+          <div className="space-y-1.5 group">
+            <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">Email Address</label>
+            <input type="email" required placeholder="name@jateam.com" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20" />
           </div>
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">Access Level</label>
-            <select value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as StaffRole }))} className="w-full rounded-xl border border-white/10 bg-zinc-900/80 px-3 py-2.5 text-sm text-zinc-50 outline-none transition focus:border-violet-500/40 appearance-none cursor-pointer">
+          <div className="space-y-1.5 group relative">
+            <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">Temporary Password</label>
+            <div className="relative">
+              <input type={showPassword ? "text" : "password"} required placeholder="Min 8 characters" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-3 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20" />
+              {form.password.length > 0 && (
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-zinc-200 transition">
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="space-y-1.5 group">
+            <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">Access Level</label>
+            <select value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as StaffRole }))} className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-3 py-2.5 text-sm text-zinc-50 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20 appearance-none cursor-pointer">
               <option value="member">Staff Member (Processing/Standard access)</option>
               <option value="admin">Administrator (Full control)</option>
             </select>
           </div>
 
-          <p className="text-[10px] text-zinc-500 mt-2 border border-zinc-800/60 bg-zinc-900/40 p-2 rounded-lg">An invite link will be automatically sent to the email address provided.</p>
+          {error && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
 
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800/50 py-2.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition">Cancel</button>
-            <button type="submit" className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 transition">Send Invite</button>
+            <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800/50 py-2.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 active:scale-[0.98] transition">Cancel</button>
+            <button type="submit" disabled={saving} className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 active:scale-[0.98] transition disabled:opacity-60">
+              {saving ? "Creating..." : "Send Invite"}
+            </button>
           </div>
         </form>
       </div>
@@ -141,12 +173,27 @@ function CreateStaffModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: 
 
 // ─── Main Page ────────────────────────────────────────────────
 export default function TeamAccessPage() {
-  const [team, setTeam] = useState<MockStaff[]>(MOCK_STAFF);
+  const [team, setTeam] = useState<Staff[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "pending" | "suspended">("all");
-  
+
   const [showCreate, setShowCreate] = useState(false);
-  const [passwordModal, setPasswordModal] = useState<MockStaff | null>(null);
+  const [passwordModal, setPasswordModal] = useState<Staff | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await jaApi.get<{ team: Staff[] }>("/team");
+        setTeam(data.team || []);
+      } catch (err) {
+        console.error("Failed to load team:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
 
   const filtered = team.filter((s) => {
     const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.email.toLowerCase().includes(search.toLowerCase());
@@ -154,15 +201,33 @@ export default function TeamAccessPage() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleToggleSuspend = (id: string) => {
-    // TODO: backend — PATCH /api/ja-admin/team/:id/status
-    setTeam((prev) => prev.map((s) => s.id === id ? { ...s, status: s.status === "suspended" ? "active" : "suspended" } : s));
+  const handleToggleSuspend = async (id: string, currentStatus: string) => {
+    const newStatus = currentStatus === "suspended" ? "active" : "suspended";
+    try {
+      await jaApi.patch(`/team/${id}`, { status: newStatus });
+      setTeam((prev) => prev.map((s) => s.id === id ? { ...s, status: newStatus as Staff["status"] } : s));
+    } catch (err) {
+      console.error("Toggle suspend failed:", err);
+    }
   };
 
-  const handleCreate = (newStaff: MockStaff) => {
+  const handleCreate = (newStaff: Staff) => {
     setTeam((prev) => [newStaff, ...prev]);
     setShowCreate(false);
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-zinc-100">Team Access</h1>
+        <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/50">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 border-b border-zinc-800 animate-pulse bg-zinc-900/30" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -257,10 +322,10 @@ export default function TeamAccessPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-[11px]">
-                    {staff.lastLogin ? (
+                    {staff.last_login ? (
                       <div>
-                        <p className="text-zinc-300">{new Date(staff.lastLogin).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
-                        <p className="text-zinc-600">{new Date(staff.lastLogin).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</p>
+                        <p className="text-zinc-300">{new Date(staff.last_login).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
+                        <p className="text-zinc-600">{new Date(staff.last_login).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</p>
                       </div>
                     ) : (
                       <span className="text-zinc-600 italic">Never</span>
@@ -268,17 +333,17 @@ export default function TeamAccessPage() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button 
+                      <button
                         onClick={() => setPasswordModal(staff)}
                         className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-[10px] font-bold text-zinc-300 hover:text-white hover:bg-zinc-700 transition"
                       >
                         Reset PW
                       </button>
-                      <button 
-                        onClick={() => handleToggleSuspend(staff.id)}
+                      <button
+                        onClick={() => handleToggleSuspend(staff.id, staff.status)}
                         className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold transition ${
-                          isSuspended 
-                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20" 
+                          isSuspended
+                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
                             : "bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20"
                         }`}
                       >

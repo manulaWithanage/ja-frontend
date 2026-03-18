@@ -105,7 +105,7 @@ export default function JaAdminLoginPage() {
 
           {/* Dev hint */}
           <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3 text-[11px] text-violet-300">
-            <span className="font-bold">Dev mode:</span> use <code className="bg-violet-500/10 px-1 rounded">admin@jateam.com</code> / <code className="bg-violet-500/10 px-1 rounded">password</code>
+            <span className="font-bold">Dev mode:</span> use <code className="bg-violet-500/10 px-1 rounded">admin@jateam.com</code> / <code className="bg-violet-500/10 px-1 rounded">JaAdmin@2026</code>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

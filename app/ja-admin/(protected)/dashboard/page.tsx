@@ -1,30 +1,62 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { MOCK_CLIENTS, MOCK_ASSIGNMENTS, MOCK_SEARCH_LOGS } from "../_mock/data";
-
-const RECENT_ACTIVITY = [
-  { time: "16:23", client: "John Doe", action: "AI Agent search run", detail: "7 results • 2 assigned", color: "violet" },
-  { time: "15:01", client: "Aisha Okonkwo", action: "Job offer received", detail: "Databricks — Data Engineer", color: "emerald" },
-  { time: "14:40", client: "Sarah Mitchell", action: "AI Agent search run", detail: "9 results • 2 assigned", color: "violet" },
-  { time: "12:15", client: "Aisha Okonkwo", action: "Application submitted", detail: "Snowflake — Senior Data Engineer", color: "sky" },
-  { time: "09:30", client: "John Doe", action: "Application submitted", detail: "Vercel — Staff Frontend Engineer", color: "sky" },
-];
+import { jaApi } from "../../../lib/jaApi";
+import type { DashboardStats, Client } from "../../../types/ja-admin";
 
 export default function JaAdminDashboard() {
-  const totalClients = MOCK_CLIENTS.length;
-  const activeClients = MOCK_CLIENTS.filter(c => c.status === "active").length;
-  const openAssignments = MOCK_ASSIGNMENTS.filter(a => a.status === "assigned").length;
-  const inPipeline = MOCK_ASSIGNMENTS.filter(a => ["applied", "interviewing", "offer"].includes(a.status)).length;
-  const totalSearchRuns = MOCK_SEARCH_LOGS.length;
-  const totalResults = MOCK_SEARCH_LOGS.reduce((acc, l) => acc + l.resultsCount, 0);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const stats = [
-    { label: "Total Clients", value: totalClients, sub: `${activeClients} active`, color: "violet", icon: "👥" },
-    { label: "Open Assignments", value: openAssignments, sub: "Pending JA action", color: "sky", icon: "📋" },
-    { label: "In Pipeline", value: inPipeline, sub: "Applied → Offer", color: "amber", icon: "🔄" },
-    { label: "Search Runs", value: totalSearchRuns, sub: `${totalResults} total results`, color: "emerald", icon: "🔍" },
+  useEffect(() => {
+    async function load() {
+      try {
+        const statsData = await jaApi.get<DashboardStats>("/dashboard/stats");
+        const clientsResponse = await jaApi.get<{ clients: Client[] }>("/clients");
+        
+        setStats(statsData);
+        setClients((clientsResponse.clients || []).slice(0, 5));
+      } catch (err) {
+        console.error("Dashboard load error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const RECENT_ACTIVITY = [
+    { time: "16:23", client: "John Doe", action: "AI Agent search run", detail: "7 results · 2 assigned", color: "violet" },
+    { time: "15:01", client: "Aisha Okonkwo", action: "Job offer received", detail: "Databricks — Data Engineer", color: "emerald" },
+    { time: "14:40", client: "Sarah Mitchell", action: "AI Agent search run", detail: "9 results · 2 assigned", color: "violet" },
+    { time: "12:15", client: "Aisha Okonkwo", action: "Application submitted", detail: "Snowflake — Senior Data Engineer", color: "sky" },
+    { time: "09:30", client: "John Doe", action: "Application submitted", detail: "Vercel — Staff Frontend Engineer", color: "sky" },
   ];
+
+  const statCards = [
+    { label: "Total Clients", value: stats?.totalClients ?? "—", sub: `${stats?.activeClients ?? 0} active`, color: "violet", icon: "👥" },
+    { label: "Jobs This Week", value: stats?.totalJobsThisWeek ?? "—", sub: "Across all clients", color: "sky", icon: "📋" },
+    { label: "Pending Batch", value: stats?.pendingBatch ?? "—", sub: "Need JA action", color: "amber", icon: "🔄" },
+    { label: "Active Clients", value: stats?.activeClients ?? "—", sub: "Portal configured", color: "emerald", icon: "✅" },
+  ];
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">Dashboard</h1>
+          <p className="mt-1 text-sm text-zinc-400">Loading...</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 h-28 animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -36,7 +68,7 @@ export default function JaAdminDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        {stats.map((s) => (
+        {statCards.map((s) => (
           <div key={s.label} className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xl">{s.icon}</span>
@@ -66,7 +98,9 @@ export default function JaAdminDashboard() {
             </Link>
           </div>
           <div className="divide-y divide-zinc-800">
-            {MOCK_CLIENTS.map((client) => (
+            {clients.length === 0 ? (
+              <div className="px-6 py-8 text-center text-sm text-zinc-500 italic">No clients found.</div>
+            ) : clients.slice(0, 5).map((client) => (
               <Link
                 key={client.id}
                 href={`/ja-admin/clients/${client.id}`}
@@ -80,7 +114,6 @@ export default function JaAdminDashboard() {
                   <p className="text-[11px] text-zinc-500 truncate">{client.email}</p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-[10px] text-zinc-400">{client.assignedJobs} jobs</span>
                   <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider
                     ${client.status === "active" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
                       client.status === "pending" ? "bg-amber-500/10 border-amber-500/20 text-amber-400" :
