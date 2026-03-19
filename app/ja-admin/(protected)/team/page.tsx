@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { jaApi } from "../../../lib/jaApi";
 import type { Staff, StaffRole, StaffStatus } from "../../../types/ja-admin";
+import { getJaUser, JaUser } from "../../../lib/jaAuth";
 
 const STATUS_STYLES: Record<StaffStatus, string> = {
   active: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
@@ -21,6 +22,7 @@ function ResetPasswordModal({ staff, onClose, onSave }: {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,15 +67,26 @@ function ResetPasswordModal({ staff, onClose, onSave }: {
               { key: "password", label: "New Temporary Password", value: password, set: setPassword },
               { key: "confirm", label: "Confirm Password", value: confirm, set: setConfirm },
             ].map((f) => (
-              <div key={f.key} className="space-y-1.5 group">
+              <div key={f.key} className="space-y-1.5 group relative">
                 <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">{f.label}</label>
-                <input
-                  type="password"
-                  required
-                  value={f.value}
-                  onChange={(e) => f.set(e.target.value)}
-                  className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-4 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={f.value}
+                    onChange={(e) => f.set(e.target.value)}
+                    className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-4 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20"
+                  />
+                  {f.value.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-zinc-200 transition"
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
 
@@ -180,8 +193,10 @@ export default function TeamAccessPage() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [passwordModal, setPasswordModal] = useState<Staff | null>(null);
+  const [currentUser, setCurrentUser] = useState<JaUser | null>(null);
 
   useEffect(() => {
+    setCurrentUser(getJaUser());
     async function load() {
       try {
         const data = await jaApi.get<{ team: Staff[] }>("/team");
@@ -194,6 +209,8 @@ export default function TeamAccessPage() {
     }
     load();
   }, []);
+
+  const isAdmin = currentUser?.role === "admin";
 
   const filtered = team.filter((s) => {
     const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase()) || s.email.toLowerCase().includes(search.toLowerCase());
@@ -243,13 +260,15 @@ export default function TeamAccessPage() {
           </h1>
           <p className="text-sm text-zinc-400 mt-1">Manage internal JA staff accounts and access privileges.</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 transition"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6m6-6v12" /></svg>
-          Add Team Member
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 active:scale-[0.98] transition"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18 12H6m6-6v12" /></svg>
+            Add Team Member
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -332,24 +351,26 @@ export default function TeamAccessPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => setPasswordModal(staff)}
-                        className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-[10px] font-bold text-zinc-300 hover:text-white hover:bg-zinc-700 transition"
-                      >
-                        Reset PW
-                      </button>
-                      <button
-                        onClick={() => handleToggleSuspend(staff.id, staff.status)}
-                        className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold transition ${
-                          isSuspended
-                            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
-                            : "bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20"
-                        }`}
-                      >
-                        {isSuspended ? "Reinstate" : "Suspend"}
-                      </button>
-                    </div>
+                    {isAdmin && (
+                      <div className="flex items-center justify-end gap-2 text-right">
+                        <button
+                          onClick={() => setPasswordModal(staff)}
+                          className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 text-[10px] font-bold text-zinc-300 hover:text-white hover:bg-zinc-700 transition"
+                        >
+                          Reset PW
+                        </button>
+                        <button
+                          onClick={() => handleToggleSuspend(staff.id, staff.status)}
+                          className={`rounded-lg border px-3 py-1.5 text-[10px] font-bold transition ${
+                            isSuspended
+                              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20"
+                              : "bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20"
+                          }`}
+                        >
+                          {isSuspended ? "Reinstate" : "Suspend"}
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               );

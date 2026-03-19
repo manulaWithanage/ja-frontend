@@ -8,6 +8,7 @@ export default function JaAdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -31,7 +32,7 @@ export default function JaAdminLoginPage() {
         return;
       }
 
-      setJaToken(data.access_token, data.token_type);
+      setJaToken(data.access_token, data.token_type, data.user);
       router.push("/ja-admin/dashboard");
     } catch {
       setError("Network error. Please try again.");
@@ -123,18 +124,29 @@ export default function JaAdminLoginPage() {
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400">
+            <div className="space-y-1.5 group relative">
+              <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">
                 Password
               </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-white/10 bg-zinc-900/80 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition focus:border-violet-500/50 focus:ring-2 focus:ring-violet-500/20"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder="••••••••"
+                  className="w-full rounded-xl border border-white/10 bg-zinc-900/80 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/90 focus:border-violet-500/50 focus:bg-zinc-900/90 focus:ring-2 focus:ring-violet-500/20"
+                />
+                {password.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-zinc-800 px-2 py-1 text-[10px] font-bold text-zinc-400 hover:text-zinc-200 transition"
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                )}
+              </div>
             </div>
 
             {error && (

@@ -6,6 +6,8 @@
 export type ClientStatus = "active" | "inactive" | "pending" | "suspended";
 export type PortalAccess = "configured" | "invited" | "never_set";
 
+export type WorkType = "remote" | "hybrid" | "onsite" | "any";
+
 export interface Client {
   id: string;
   name: string;
@@ -18,6 +20,14 @@ export interface Client {
   last_login: string | null;
   created_at: string;
   updated_at: string;
+  // Optional profile fields
+  current_title: string | null;
+  industry: string | null;
+  target_role: string | null;
+  preferred_location: string | null;
+  work_type: WorkType | null;
+  linkedin_url: string | null;
+  referral_source: string | null;
 }
 
 // ─── JA Staff ────────────────────────────────────────────────

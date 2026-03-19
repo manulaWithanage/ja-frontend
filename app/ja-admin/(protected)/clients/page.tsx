@@ -72,13 +72,14 @@ function ViewCredentialsModal({ client, onClose }: { client: Client; onClose: ()
 function SetPasswordModal({ client, onClose, onSave }: {
   client: Client;
   onClose: () => void;
-  onSave: (id: string, password: string) => void;
+  onSave: (id: string) => void;
 }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +88,7 @@ function SetPasswordModal({ client, onClose, onSave }: {
     setSaving(true);
     try {
       await jaApi.patch(`/clients/${client.id}`, { password });
-      onSave(client.id, password);
+      onSave(client.id);
       setSuccess(true);
       setTimeout(onClose, 1200);
     } catch (err: unknown) {
@@ -123,15 +124,26 @@ function SetPasswordModal({ client, onClose, onSave }: {
               { key: "password", label: "New Password", value: password, set: setPassword },
               { key: "confirm", label: "Confirm Password", value: confirm, set: setConfirm },
             ].map((f) => (
-              <div key={f.key} className="space-y-1.5 group">
+              <div key={f.key} className="space-y-1.5 group relative">
                 <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">{f.label}</label>
-                <input
-                  type="password"
-                  required
-                  value={f.value}
-                  onChange={(e) => f.set(e.target.value)}
-                  className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-4 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={f.value}
+                    onChange={(e) => f.set(e.target.value)}
+                    className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-4 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20"
+                  />
+                  {f.value.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-bold text-zinc-400 hover:text-zinc-200 transition"
+                    >
+                      {showPassword ? "Hide" : "Show"}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
 
@@ -152,22 +164,37 @@ function SetPasswordModal({ client, onClose, onSave }: {
 
 // ─── Create Client Modal ──────────────────────────────────────
 function CreateClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (c: Client) => void }) {
-  const [form, setForm] = useState({ name: "", email: "", phone: "", notes: "", password: "" });
+  const [form, setForm] = useState({
+    name: "", email: "", phone: "", notes: "", password: "",
+    // Additional profile fields (all optional)
+    current_title: "", industry: "", target_role: "",
+    preferred_location: "", work_type: "", linkedin_url: "", referral_source: "",
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showExtra, setShowExtra] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError("");
     try {
-      const newClient = await jaApi.post<Client>("/clients", {
+      const payload: Record<string, string | undefined> = {
         name: form.name,
         email: form.email,
         phone: form.phone || undefined,
         notes: form.notes || undefined,
         password: form.password || undefined,
-      });
+        current_title: form.current_title || undefined,
+        industry: form.industry || undefined,
+        target_role: form.target_role || undefined,
+        preferred_location: form.preferred_location || undefined,
+        work_type: form.work_type || undefined,
+        linkedin_url: form.linkedin_url || undefined,
+        referral_source: form.referral_source || undefined,
+      };
+      const newClient = await jaApi.post<Client>("/clients", payload);
       onAdd(newClient);
       onClose();
     } catch (err: unknown) {
@@ -177,11 +204,11 @@ function CreateClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (c:
     }
   };
 
-  const [showPassword, setShowPassword] = useState(false);
+  const filledExtraCount = [form.current_title, form.industry, form.target_role, form.preferred_location, form.work_type, form.linkedin_url, form.referral_source].filter(Boolean).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 animate-in fade-in duration-200">
-      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+      <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-bold text-zinc-100">Create New Client</h3>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition">
@@ -190,19 +217,23 @@ function CreateClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (c:
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* ── Section 1: Essential Info ── */}
           <div className="grid grid-cols-2 gap-3">
             {[
-              { key: "name", label: "Full Name", placeholder: "John Doe", type: "text", full: true },
-              { key: "email", label: "Email", placeholder: "john@email.com", type: "email", full: true },
-              { key: "phone", label: "Phone", placeholder: "+1 415 555 0100", type: "text", full: false },
-              { key: "password", label: "Temp Password", placeholder: "TJH@2026!", type: showPassword ? "text" : "password", full: false },
+              { key: "name", label: "Full Name", placeholder: "John Doe", type: "text", full: true, required: true },
+              { key: "email", label: "Email", placeholder: "john@email.com", type: "email", full: true, required: true },
+              { key: "phone", label: "Phone", placeholder: "+1 415 555 0100", type: "text", full: false, required: false },
+              { key: "password", label: "Temp Password", placeholder: "TJH@2026!", type: showPassword ? "text" : "password", full: false, required: false },
             ].map((f) => (
               <div key={f.key} className={`space-y-1.5 ${f.full ? "col-span-2" : "col-span-1"} group relative`}>
-                <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">{f.label}</label>
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">
+                  {f.label}
+                  {f.required && <span className="text-red-400 ml-0.5">*</span>}
+                </label>
                 <div className="relative">
                   <input
                     type={f.type}
-                    required={f.key === "name" || f.key === "email"}
+                    required={f.required}
                     placeholder={f.placeholder}
                     value={(form as Record<string, string>)[f.key]}
                     onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
@@ -234,6 +265,108 @@ function CreateClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (c:
           </div>
 
           <p className="text-[10px] text-zinc-600">Setting a temp password will mark portal as &ldquo;Invite Sent&rdquo;. Leave blank to configure later.</p>
+
+          {/* ── Toggle: Additional Info ── */}
+          <button
+            type="button"
+            onClick={() => setShowExtra(!showExtra)}
+            className="w-full flex items-center justify-between rounded-xl border border-dashed border-zinc-700 bg-zinc-900/30 px-4 py-2.5 text-xs font-semibold text-zinc-400 hover:text-violet-400 hover:border-violet-500/40 hover:bg-violet-500/5 active:scale-[0.99] transition"
+          >
+            <span className="flex items-center gap-2">
+              <svg className={`h-4 w-4 transition-transform duration-200 ${showExtra ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              {showExtra ? "Hide Additional Info" : "Add Additional Info"}
+            </span>
+            {filledExtraCount > 0 && !showExtra && (
+              <span className="rounded-full bg-violet-500/20 border border-violet-500/30 px-2 py-0.5 text-[9px] font-bold text-violet-400">
+                {filledExtraCount} added
+              </span>
+            )}
+          </button>
+
+          {/* ── Section 2: Additional Profile (Collapsible) ── */}
+          {showExtra && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/20 p-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-1">Profile Details <span className="text-zinc-600 normal-case tracking-normal font-normal">— all optional</span></p>
+
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { key: "current_title", label: "Current / Last Title", placeholder: "e.g. Senior Frontend Dev" },
+                  { key: "industry", label: "Industry", placeholder: "e.g. Tech, Finance, Healthcare" },
+                  { key: "target_role", label: "Target Role", placeholder: "e.g. Full-Stack Engineer" },
+                  { key: "preferred_location", label: "Preferred Location", placeholder: "e.g. New York, Remote" },
+                ].map((f) => (
+                  <div key={f.key} className="space-y-1.5 group">
+                    <label className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500 group-focus-within:text-violet-400 transition-colors">{f.label}</label>
+                    <input
+                      type="text"
+                      placeholder={f.placeholder}
+                      value={(form as Record<string, string>)[f.key]}
+                      onChange={(e) => setForm((p) => ({ ...p, [f.key]: e.target.value }))}
+                      className="w-full rounded-lg border border-white/5 bg-zinc-900/60 px-3 py-2 text-[13px] text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/20"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Work Type Selector */}
+              <div className="space-y-1.5 group">
+                <label className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500 group-focus-within:text-violet-400 transition-colors">Work Type Preference</label>
+                <div className="flex gap-2">
+                  {[
+                    { value: "remote", label: "Remote", icon: "🏠" },
+                    { value: "hybrid", label: "Hybrid", icon: "🔄" },
+                    { value: "onsite", label: "On-site", icon: "🏢" },
+                    { value: "any", label: "Any", icon: "✨" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, work_type: p.work_type === opt.value ? "" : opt.value }))}
+                      className={`flex-1 rounded-lg border px-2 py-2 text-[11px] font-semibold transition active:scale-[0.97] ${
+                        form.work_type === opt.value
+                          ? "bg-violet-500/15 border-violet-500/40 text-violet-300"
+                          : "border-zinc-700/50 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+                      }`}
+                    >
+                      <span className="block text-sm mb-0.5">{opt.icon}</span>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5 group">
+                  <label className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500 group-focus-within:text-violet-400 transition-colors">LinkedIn URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://linkedin.com/in/..."
+                    value={form.linkedin_url}
+                    onChange={(e) => setForm((p) => ({ ...p, linkedin_url: e.target.value }))}
+                    className="w-full rounded-lg border border-white/5 bg-zinc-900/60 px-3 py-2 text-[13px] text-zinc-50 placeholder-zinc-600 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/20"
+                  />
+                </div>
+                <div className="space-y-1.5 group">
+                  <label className="block text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500 group-focus-within:text-violet-400 transition-colors">Referral Source</label>
+                  <select
+                    value={form.referral_source}
+                    onChange={(e) => setForm((p) => ({ ...p, referral_source: e.target.value }))}
+                    className="w-full rounded-lg border border-white/5 bg-zinc-900/60 px-3 py-2 text-[13px] text-zinc-50 outline-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:ring-1 focus:ring-violet-500/20 appearance-none cursor-pointer"
+                  >
+                    <option value="" className="bg-zinc-900 text-zinc-500">Select...</option>
+                    <option value="word_of_mouth" className="bg-zinc-900">Word of Mouth</option>
+                    <option value="social_media" className="bg-zinc-900">Social Media</option>
+                    <option value="website" className="bg-zinc-900">Website</option>
+                    <option value="linkedin" className="bg-zinc-900">LinkedIn</option>
+                    <option value="referral" className="bg-zinc-900">Client Referral</option>
+                    <option value="other" className="bg-zinc-900">Other</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           {error && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
 
