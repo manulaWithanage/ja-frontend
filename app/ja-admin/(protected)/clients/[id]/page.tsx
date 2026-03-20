@@ -87,9 +87,9 @@ export default function ClientDetailPage() {
 
       {/* Profile & Access */}
       {activeTab === "profile" && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2 lg:grid-rows-[auto_1fr]">
           {/* Account Info */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4 lg:col-start-1 lg:row-start-1">
             <h2 className="text-sm font-bold text-zinc-100">Account Information</h2>
             <div className="space-y-3">
               {[
@@ -97,8 +97,8 @@ export default function ClientDetailPage() {
                 { label: "Email", value: client.email },
                 { label: "Phone", value: client.phone || "—" },
                 { label: "Account Status", value: client.status.charAt(0).toUpperCase() + client.status.slice(1) },
-                { label: "Member Since", value: new Date(client.created_at).toLocaleDateString() },
-                { label: "Last Updated", value: new Date(client.updated_at).toLocaleDateString() },
+                { label: "Member Since", value: new Date(client.created_at || "").toLocaleDateString() },
+                { label: "Last Updated", value: new Date(client.updated_at || "").toLocaleDateString() },
               ].map((row) => (
                 <div key={row.label} className="flex items-center justify-between gap-4 border-b border-zinc-800/50 pb-2 last:border-0 last:pb-0">
                   <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">{row.label}</span>
@@ -109,7 +109,7 @@ export default function ClientDetailPage() {
           </div>
 
           {/* Portal Access */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4 lg:col-start-2 lg:row-start-1">
             <h2 className="text-sm font-bold text-zinc-100">Portal Access</h2>
 
             <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-4 py-3 space-y-2.5">
@@ -134,6 +134,40 @@ export default function ClientDetailPage() {
               </button>
             </div>
           </div>
+
+          {/* Job Profile & Preferences */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4 lg:col-span-2 lg:row-start-2">
+            <h2 className="text-sm font-bold text-zinc-100">Job Profile & Preferences</h2>
+            <div className="grid gap-x-12 gap-y-3 sm:grid-cols-2">
+              {[
+                { label: "Current / Last Title", value: client.current_title },
+                { label: "Target Role", value: client.target_role },
+                { label: "Industry", value: client.industry },
+                { label: "Preferred Location", value: client.preferred_location },
+                { label: "Work Type", value: client.work_type ? client.work_type.charAt(0).toUpperCase() + client.work_type.slice(1) : null },
+                { label: "Referral Source", value: client.referral_source ? client.referral_source.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : null },
+              ].map((row) => (
+                <div key={row.label} className="flex flex-col gap-1 border-b border-zinc-800/50 pb-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500">{row.label}</span>
+                  <span className="text-sm font-medium text-zinc-200">{row.value || <span className="text-zinc-600 italic text-xs">Not specified</span>}</span>
+                </div>
+              ))}
+              
+              <div className="flex flex-col gap-1 border-b border-zinc-800/50 pb-2 sm:col-span-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500">LinkedIn Profile</span>
+                <span className="text-sm font-medium text-zinc-200">
+                  {client.linkedin_url ? (
+                    <a href={client.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300 underline underline-offset-2 transition-colors">
+                      {client.linkedin_url}
+                    </a>
+                  ) : (
+                    <span className="text-zinc-600 italic text-xs">Not specified</span>
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
         </div>
       )}
     </div>

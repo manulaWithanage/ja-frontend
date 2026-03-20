@@ -6,28 +6,46 @@
 export type ClientStatus = "active" | "inactive" | "pending" | "suspended";
 export type PortalAccess = "configured" | "invited" | "never_set";
 
-export type WorkType = "remote" | "hybrid" | "onsite" | "any";
+export type WorkType = 'remote' | 'hybrid' | 'onsite' | 'any';
+export type ReferralSource = 'word_of_mouth' | 'social_media' | 'website' | 'linkedin' | 'referral' | 'other';
 
-export interface Client {
+export interface ClientProfileFields {
+  current_title?: string | null;
+  industry?: string | null;
+  target_role?: string | null;
+  preferred_location?: string | null;
+  work_type?: WorkType | null;
+  linkedin_url?: string | null;
+  referral_source?: ReferralSource | null;
+}
+
+export interface Client extends ClientProfileFields {
   id: string;
   name: string;
   email: string;
-  phone: string | null;
+  phone?: string | null;
   status: ClientStatus;
   portal_access: PortalAccess;
-  notes: string | null;
-  invite_sent_at: string | null;
-  last_login: string | null;
-  created_at: string;
-  updated_at: string;
-  // Optional profile fields
-  current_title: string | null;
-  industry: string | null;
-  target_role: string | null;
-  preferred_location: string | null;
-  work_type: WorkType | null;
-  linkedin_url: string | null;
-  referral_source: string | null;
+  notes?: string | null;
+  invite_sent_at?: string | null;
+  last_login?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ClientCreatePayload extends ClientProfileFields {
+  name: string;
+  email: string;
+  phone?: string;          
+  password?: string;       
+  status?: string;         
+  notes?: string;          
+}
+
+export interface ClientUpdatePayload extends ClientProfileFields {
+    name?: string;
+    phone?: string;
+    notes?: string;
 }
 
 // ─── JA Staff ────────────────────────────────────────────────
@@ -46,7 +64,7 @@ export interface Staff {
 }
 
 // ─── Job ─────────────────────────────────────────────────────
-export type JobStatus = "queued" | "batch_active" | "applied" | "interviewing" | "offer" | "rejected";
+export type JobStatus = "queued" | "assigned" | "batch_active" | "applied" | "interviewing" | "offer" | "rejected";
 
 export interface Job {
   id: string;

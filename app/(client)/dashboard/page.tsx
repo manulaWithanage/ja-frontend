@@ -1,41 +1,25 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { apiGet } from "../../lib/api";
+import { getClientToken } from "../../lib/clientAuth";
 
-// Mock data for the dashboard
-const MOCK_ASSIGNED_JOBS = [
-  {
-    id: "1",
-    job_title: "Senior Frontend Engineer",
-    company: "TechCorp",
-    location: "Remote",
-    status: "assigned",
-    assigned_at: "2026-03-10",
-    match_score: 92,
-  },
-  {
-    id: "2",
-    job_title: "Full Stack Developer",
-    company: "InnovateLab",
-    location: "San Francisco, CA",
-    status: "applied",
-    assigned_at: "2026-03-08",
-    match_score: 87,
-  },
-  {
-    id: "3",
-    job_title: "React Developer",
-    company: "CloudBase Inc",
-    location: "New York, NY",
-    status: "interviewing",
-    assigned_at: "2026-03-05",
-    match_score: 78,
-  },
-];
+interface Job {
+  id: string;
+  job_title: string;
+  company?: string;
+  location?: string;
+  status: string;
+  created_at?: string;
+  assigned_at?: string;
+  match_score?: number;
+}
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
   assigned: { bg: "bg-sky-500/10 border-sky-500/20", text: "text-sky-300", dot: "bg-sky-400" },
+  queued: { bg: "bg-sky-500/10 border-sky-500/20", text: "text-sky-300", dot: "bg-sky-400" },
+  reviewing: { bg: "bg-sky-500/10 border-sky-500/20", text: "text-sky-300", dot: "bg-sky-400" },
   saved: { bg: "bg-zinc-500/10 border-zinc-500/20", text: "text-zinc-300", dot: "bg-zinc-400" },
   applied: { bg: "bg-violet-500/10 border-violet-500/20", text: "text-violet-300", dot: "bg-violet-400" },
   interviewing: { bg: "bg-amber-500/10 border-amber-500/20", text: "text-amber-300", dot: "bg-amber-400" },
@@ -44,17 +28,38 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> =
 };
 
 export default function DashboardPage() {
-  const userName = useMemo(() => {
-    if (typeof window === "undefined") return "Client";
-    try {
-      const token = localStorage.getItem("client_access_token") || "";
-      if (token.startsWith("mock_")) {
-        const payload = JSON.parse(atob(token.replace("mock_", "")));
-        return payload.name?.split(" ")[0] || "Client";
+  const [userName, setUserName] = useState<string>("Client");
+  const [jobs, setJobs] = useState<Job[]>([]);
+
+  useEffect(() => {
+    async function loadData() {
+      const token = getClientToken();
+      if (!token) return;
+      try {
+        const [userRes, jobsRes] = await Promise.all([
+          apiGet<{ full_name: string }>("/api/client/auth/me", token).catch(() => null),
+          apiGet<any>("/api/client/jobs", token).catch(() => [])
+        ]);
+        
+        if (userRes?.full_name) {
+          setUserName(userRes.full_name.split(" ")[0]);
+        }
+        
+        // Handle jobs array (direct array or nested in data)
+        const jobsArray = Array.isArray(jobsRes) ? jobsRes : jobsRes?.data && Array.isArray(jobsRes.data) ? jobsRes.data : [];
+        setJobs(jobsArray);
+        
+      } catch (err) {
+        console.error("Failed to fetch dashboard data:", err);
       }
-    } catch { /* ignore */ }
-    return "Client";
+    }
+    loadData();
   }, []);
+
+  // Compute stats
+  const assignedCount = jobs.filter(j => ['queued', 'assigned', 'reviewing'].includes(j.status)).length;
+  const appliedCount = jobs.filter(j => j.status === 'applied').length;
+  const interviewingCount = jobs.filter(j => j.status === 'interviewing').length;
 
   return (
     <div className="space-y-8">
@@ -71,10 +76,10 @@ export default function DashboardPage() {
       {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Assigned Jobs", value: "3", icon: "📋", accent: "from-sky-500/20 to-sky-500/5" },
-          { label: "Applied", value: "1", icon: "🚀", accent: "from-violet-500/20 to-violet-500/5" },
-          { label: "Interviewing", value: "1", icon: "💬", accent: "from-amber-500/20 to-amber-500/5" },
-          { label: "Searches Today", value: "0 / 10", icon: "🔍", accent: "from-emerald-500/20 to-emerald-500/5" },
+          { label: "Assigned Jobs", value: assignedCount.toString(), icon: "📋", accent: "from-sky-500/20 to-sky-500/5" },
+          { label: "Applied", value: appliedCount.toString(), icon: "🚀", accent: "from-violet-500/20 to-violet-500/5" },
+          { label: "Interviewing", value: interviewingCount.toString(), icon: "💬", accent: "from-amber-500/20 to-amber-500/5" },
+          { label: "Searches Today", value: "Available", icon: "🔍", accent: "from-emerald-500/20 to-emerald-500/5" },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -102,37 +107,51 @@ export default function DashboardPage() {
         </div>
 
         <div className="space-y-3">
-          {MOCK_ASSIGNED_JOBS.map((job) => {
-            const style = STATUS_STYLES[job.status] || STATUS_STYLES.assigned;
-            return (
-              <div
-                key={job.id}
-                className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 transition hover:border-zinc-700 hover:bg-zinc-900/80"
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-sm font-semibold text-zinc-100 truncate">{job.job_title}</h3>
-                    {job.match_score && (
-                      <span className="shrink-0 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                        {job.match_score}% match
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-0.5 text-xs text-zinc-400">
-                    {job.company} · {job.location}
-                  </p>
-                </div>
+          {jobs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40 px-6 py-10 text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                No active jobs
+              </p>
+              <p className="mt-2 text-sm text-zinc-400">
+                You haven&apos;t assigned any jobs to JA yet, and no jobs have been pushed to you. Head to search to find opportunities!
+              </p>
+            </div>
+          ) : (
+            jobs.slice(0, 5).map((job) => {
+              const style = STATUS_STYLES[job.status] || STATUS_STYLES.saved;
+              const dateStr = job.created_at || job.assigned_at;
+              const displayDate = dateStr ? new Date(dateStr).toLocaleDateString() : 'Recently';
 
-                <div className="ml-4 flex items-center gap-3">
-                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${style.bg} ${style.text}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                    {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-                  </span>
-                  <span className="text-[11px] text-zinc-500">{job.assigned_at}</span>
+              return (
+                <div
+                  key={job.id}
+                  className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 transition hover:border-zinc-700 hover:bg-zinc-900/80"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-sm font-semibold text-zinc-100 truncate">{job.job_title}</h3>
+                      {job.match_score != null && (
+                        <span className="shrink-0 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                          {job.match_score}% match
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-xs text-zinc-400">
+                      {job.company || "Unknown Company"} · {job.location || "Location not specified"}
+                    </p>
+                  </div>
+
+                  <div className="ml-4 flex items-center gap-3">
+                    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${style.bg} ${style.text}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                      {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                    </span>
+                    <span className="text-[11px] text-zinc-500 hidden sm:inline-block">{displayDate}</span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
 

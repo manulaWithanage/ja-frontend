@@ -555,7 +555,7 @@ export default function ClientsPage() {
                     ) : (
                       <p className="text-[10px] text-zinc-600">Never logged in</p>
                     )}
-                    <p className="text-[10px] text-zinc-600 mt-1">Created {new Date(client.created_at).toLocaleDateString()}</p>
+                    <p className="text-[10px] text-zinc-600 mt-1">Created {new Date(client.created_at || "").toLocaleDateString()}</p>
                   </div>
                 </div>
 

@@ -7,6 +7,7 @@ import type { Client, Job, JobStatus } from "../../../types/ja-admin";
 
 const STATUS_COLORS: Record<string, string> = {
   queued: "bg-zinc-500/10 border-zinc-500/20 text-zinc-400",
+  assigned: "bg-sky-500/10 border-sky-500/20 text-sky-400",
   batch_active: "bg-violet-500/10 border-violet-500/20 text-violet-400",
   applied: "bg-blue-500/10 border-blue-500/20 text-blue-400",
   interviewing: "bg-amber-500/10 border-amber-500/20 text-amber-400",
@@ -22,8 +23,8 @@ function getCurrentWeekId(): string {
   return `${now.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
 }
 
-function getClientLimit(createdAt: string): number {
-  const createdDate = new Date(createdAt);
+function getClientLimit(createdAt?: string): number {
+  const createdDate = createdAt ? new Date(createdAt) : new Date();
   const threeMonthsAgo = new Date();
   threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
   return createdDate < threeMonthsAgo ? 80 : 60;
@@ -180,10 +181,17 @@ export default function AssignmentsPipelinePage() {
   }, [defaultClientParam]);
 
   // Load jobs when client or week changes
+  // NOTE: We fetch ALL non-archived jobs for the client (no week_id filter on active
+  // pipeline) because client-portal submitted jobs may not have a week_id set.
   const loadJobs = useCallback(async (clientId: string, weekId: string) => {
     try {
-        const data = await jaApi.get<{ jobs: Job[] }>(`/jobs?client=${clientId}&week_id=${weekId}`);
-        setJobs(data.jobs || []);
+      // For current week: load ALL jobs (queued + assigned) regardless of week_id
+      // so client-submitted jobs with no week_id still appear
+      const query = weekId === CURRENT_WEEK_ID
+        ? `/jobs?client_id=${clientId}`
+        : `/jobs?client_id=${clientId}&week_id=${weekId}`;
+      const data = await jaApi.get<{ jobs: Job[] }>(query);
+      setJobs(data.jobs || []);
     } catch (err) {
       console.error("Failed to load jobs:", err);
       setJobs([]);
@@ -200,8 +208,10 @@ export default function AssignmentsPipelinePage() {
 
   // Job breakdown for current week
   const queuedJobs = jobs.filter(j => j.status === "queued");
-  const batchJobs = jobs.filter(j => j.status === "batch_active");
+  // 'assigned' is the new backend-consistent name for what was 'batch_active'
+  const batchJobs = jobs.filter(j => j.status === "batch_active" || j.status === "assigned");
   const completedJobs = jobs.filter(j => ["applied", "interviewing", "offer", "rejected"].includes(j.status) && !j.is_archived);
+  const clientRequestedCount = queuedJobs.filter(j => j.source === "client_selected").length;
   const limit = selectedClient ? getClientLimit(selectedClient.created_at) : 60;
 
   // Actions
@@ -339,20 +349,40 @@ export default function AssignmentsPipelinePage() {
                 {/* 1. Queued */}
                 <div className="flex-1 flex flex-col rounded-xl border border-zinc-800 bg-zinc-900/20 overflow-hidden">
                   <div className="p-3 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center">
-                    <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">1. Queued</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">1. Queued</h3>
+                      {clientRequestedCount > 0 && (
+                        <span className="bg-sky-500/15 text-sky-400 border border-sky-500/20 text-[9px] font-bold px-2 py-0.5 rounded-full animate-pulse">
+                          {clientRequestedCount} client req
+                        </span>
+                      )}
+                    </div>
                     <span className="bg-zinc-800 text-zinc-400 text-[10px] font-bold px-2 py-0.5 rounded-full">{queuedJobs.length}</span>
                   </div>
                   <div className="flex-1 overflow-y-auto p-3 space-y-3">
                     {queuedJobs.length === 0 ? <p className="text-[11px] text-zinc-500 text-center py-10 italic">Queue is empty.</p> : queuedJobs.map(job => (
-                      <div key={job.id} className="group rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 hover:border-zinc-700 transition">
+                      <div key={job.id} className={`group rounded-xl border p-3 hover:border-zinc-700 transition ${
+                        job.source === "client_selected"
+                          ? "border-sky-500/30 bg-sky-950/20"
+                          : "border-zinc-800 bg-zinc-900/60"
+                      }`}>
                         <div className="flex justify-between items-start mb-1">
-                          <h4 className="text-xs font-bold text-zinc-200">{job.job_title}</h4>
-                          <span className="text-[10px] font-bold text-emerald-400/80">{job.match_score}%</span>
+                          <div className="flex-1 min-w-0">
+                            {job.source === "client_selected" && (
+                              <div className="mb-1">
+                                <span className="inline-flex items-center gap-1 bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded">
+                                  ⭐ Client Request
+                                </span>
+                              </div>
+                            )}
+                            <h4 className="text-xs font-bold text-zinc-200 truncate">{job.job_title}</h4>
+                          </div>
+                          <span className="text-[10px] font-bold text-emerald-400/80 shrink-0 ml-2">{job.match_score}%</span>
                         </div>
                         <p className="text-[10px] text-zinc-500 mb-2">{job.company} · {job.location}</p>
                         <div className="flex gap-2">
                           {job.apply_link && <a href={job.apply_link} target="_blank" rel="noreferrer" className="flex-1 text-center rounded border border-zinc-700/50 bg-zinc-800/50 py-1 text-[9px] font-bold text-zinc-400 hover:text-zinc-200">View Link</a>}
-                          <button onClick={() => updateJobStatus(job.id, "batch_active")} disabled={batchJobs.length >= 15} className="flex-1 rounded bg-violet-500/15 border border-violet-500/20 py-1 text-[9px] font-bold text-violet-300 hover:bg-violet-500/30 disabled:opacity-50 transition">→ Add to Batch</button>
+                          <button onClick={() => updateJobStatus(job.id, "assigned")} disabled={batchJobs.length >= 15} className="flex-1 rounded bg-violet-500/15 border border-violet-500/20 py-1 text-[9px] font-bold text-violet-300 hover:bg-violet-500/30 disabled:opacity-50 transition">→ Add to Batch</button>
                         </div>
                       </div>
                     ))}
