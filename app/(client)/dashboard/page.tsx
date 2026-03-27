@@ -137,11 +137,6 @@ export default function DashboardPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3">
                       <h3 className="text-sm font-semibold text-zinc-100 truncate">{job.job_title}</h3>
-                      {job.match_score != null && (
-                        <span className="shrink-0 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                          {job.match_score}% match
-                        </span>
-                      )}
                     </div>
                     <p className="mt-0.5 text-xs text-zinc-400">
                       {job.company || "Unknown Company"} · {job.location || "Location not specified"}

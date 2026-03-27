@@ -184,6 +184,79 @@ function CreateStaffModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: 
   );
 }
 
+// ─── Delete Staff Modal ──────────────────────────────────────────
+function DeleteStaffModal({ staff, onClose, onDeleted }: {
+  staff: Staff;
+  onClose: () => void;
+  onDeleted: (id: string) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [input, setInput] = useState("");
+  const [error, setError] = useState("");
+
+  const handleDelete = async () => {
+    if (input.trim().toLowerCase() !== staff.name.trim().toLowerCase()) {
+      setError("Name doesn't match. Please type the member name exactly.");
+      return;
+    }
+    setConfirming(true);
+    try {
+      await jaApi.delete(`/team/${staff.id}`);
+      onDeleted(staff.id);
+      onClose();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to delete staff member");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4 animate-in fade-in duration-150">
+      <div className="w-full max-w-md rounded-2xl border border-red-500/20 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95 duration-150">
+        <div className="mb-5 flex items-center gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 border border-red-500/20">
+            <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-white">Remove Team Member</h3>
+            <p className="text-xs text-zinc-500 mt-0.5">This action is permanent and cannot be undone.</p>
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-red-500/5 border border-red-500/15 px-4 py-3 mb-5 text-xs text-red-300 leading-relaxed">
+          Removing <strong className="text-red-200">{staff.name}</strong> ({staff.email}) will permanently delete their staff account and revoke all access.
+        </div>
+
+        <div className="space-y-2 mb-5">
+          <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+            Type <span className="text-zinc-200 font-mono">{staff.name}</span> to confirm
+          </label>
+          <input
+            type="text"
+            value={input}
+            onChange={e => { setInput(e.target.value); setError(""); }}
+            placeholder={staff.name}
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-700 outline-none focus:border-red-500/40 focus:ring-1 focus:ring-red-500/20 transition"
+          />
+          {error && <p className="text-xs text-red-400">{error}</p>}
+        </div>
+
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-zinc-800 bg-zinc-900 py-2.5 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition">Cancel</button>
+          <button
+            onClick={handleDelete}
+            disabled={confirming || input.trim().toLowerCase() !== staff.name.trim().toLowerCase()}
+            className="flex-1 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed py-2.5 text-xs font-bold text-white transition"
+          >
+            {confirming ? "Removing..." : "Remove Member"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────
 export default function TeamAccessPage() {
   const [team, setTeam] = useState<Staff[]>([]);
@@ -193,6 +266,7 @@ export default function TeamAccessPage() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [passwordModal, setPasswordModal] = useState<Staff | null>(null);
+  const [deleteModal, setDeleteModal] = useState<Staff | null>(null);
   const [currentUser, setCurrentUser] = useState<JaUser | null>(null);
 
   useEffect(() => {
@@ -250,6 +324,7 @@ export default function TeamAccessPage() {
     <div className="space-y-6">
       {showCreate && <CreateStaffModal onClose={() => setShowCreate(false)} onAdd={handleCreate} />}
       {passwordModal && <ResetPasswordModal staff={passwordModal} onClose={() => setPasswordModal(null)} onSave={() => {}} />}
+      {deleteModal && <DeleteStaffModal staff={deleteModal} onClose={() => setDeleteModal(null)} onDeleted={(id) => setTeam(prev => prev.filter(s => s.id !== id))} />}
 
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800/60 pb-5">
@@ -310,13 +385,13 @@ export default function TeamAccessPage() {
             ) : filtered.map((staff) => {
               const statusStyle = STATUS_STYLES[staff.status];
               const isSuspended = staff.status === "suspended";
-              const isAdmin = staff.role === "admin";
+              const isStaffAdmin = staff.role === "admin";
 
               return (
                 <tr key={staff.id} className={`transition ${isSuspended ? "bg-red-500/5 opacity-80" : "hover:bg-zinc-900/50"}`}>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${isAdmin ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" : "bg-violet-500/15 text-violet-300 border border-violet-500/20"}`}>
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${isStaffAdmin ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" : "bg-violet-500/15 text-violet-300 border border-violet-500/20"}`}>
                         {staff.name.charAt(0)}
                       </div>
                       <div>
@@ -326,7 +401,7 @@ export default function TeamAccessPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    {isAdmin ? (
+                    {isStaffAdmin ? (
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-500">
                         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         Admin
@@ -369,6 +444,15 @@ export default function TeamAccessPage() {
                         >
                           {isSuspended ? "Reinstate" : "Suspend"}
                         </button>
+                        {staff.email !== currentUser?.email && (
+                          <button
+                            onClick={() => setDeleteModal(staff)}
+                            className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-[10px] font-bold text-red-400 hover:bg-red-500/15 transition"
+                            title="Remove member"
+                          >
+                            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        )}
                       </div>
                     )}
                   </td>

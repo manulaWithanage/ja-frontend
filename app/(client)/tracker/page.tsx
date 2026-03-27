@@ -15,6 +15,7 @@ interface Job {
   assigned_at?: string;
   match_score?: number;
   apply_link?: string;
+  week_id?: string;
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; dot: string }> = {
@@ -68,29 +69,11 @@ export default function TrackerPage() {
     loadJobs();
   }, []);
 
-  const getWeekGroup = (dateStr?: string) => {
-    if (!dateStr) return "Recently";
-    const date = new Date(dateStr);
-    
-    // Get start of the current week (Sunday)
-    const now = new Date();
-    const startOfThisWeek = new Date(now);
-    startOfThisWeek.setDate(now.getDate() - now.getDay());
-    startOfThisWeek.setHours(0, 0, 0, 0);
-
-    // Get start of the week for the job
-    const startOfJobWeek = new Date(date);
-    startOfJobWeek.setDate(date.getDate() - date.getDay());
-    startOfJobWeek.setHours(0, 0, 0, 0);
-
-    const diffTime = startOfThisWeek.getTime() - startOfJobWeek.getTime();
-    const diffWeeks = Math.round(diffTime / (1000 * 60 * 60 * 24 * 7));
-
-    if (diffWeeks === 0) return "This Week";
-    if (diffWeeks === 1) return "Last Week";
-    
-    // For older weeks, format cleanly into a specific bounded week
-    return `Week of ${startOfJobWeek.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  const formatWeek = (weekId: string) => {
+    if (weekId === "Past Jobs") return "Past Jobs";
+    const m = weekId.match(/^(\d{4})-W(\d{2})$/);
+    if (m) return `Week ${parseInt(m[2], 10)} (${m[1]})`;
+    return weekId;
   };
 
   const filteredJobs = filterStatus === "all"
@@ -98,20 +81,16 @@ export default function TrackerPage() {
     : jobs.filter((j) => j.status === filterStatus);
 
   const groupedJobs = filteredJobs.reduce((acc: Record<string, Job[]>, job) => {
-    const group = getWeekGroup(job.created_at || job.assigned_at);
+    const group = job.week_id || "Past Jobs";
     if (!acc[group]) acc[group] = [];
     acc[group].push(job);
     return acc;
   }, {});
 
   const sortedGroups = Object.keys(groupedJobs).sort((a, b) => {
-    if (a === "Recently") return 1;
-    if (b === "Recently") return -1;
-    
-    // Fallback max timestamps inside the group
-    const maxA = Math.max(...groupedJobs[a].map((j) => new Date(j.created_at || j.assigned_at || 0).getTime()));
-    const maxB = Math.max(...groupedJobs[b].map((j) => new Date(j.created_at || j.assigned_at || 0).getTime()));
-    return maxB - maxA;
+    if (a === "Past Jobs") return 1;
+    if (b === "Past Jobs") return -1;
+    return b.localeCompare(a);
   });
 
   return (
@@ -205,6 +184,8 @@ export default function TrackerPage() {
               return d2 - d1;
             });
 
+            const displayTitle = formatWeek(weekGroup);
+
             return (
               <section key={weekGroup} className="space-y-4">
                 <button
@@ -219,7 +200,7 @@ export default function TrackerPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                     </svg>
                     <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-zinc-300 group-hover:text-emerald-400 transition-colors whitespace-nowrap">
-                      {weekGroup}
+                      {displayTitle}
                     </h2>
                   </div>
                   <div className="h-[1px] w-full bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-colors" />

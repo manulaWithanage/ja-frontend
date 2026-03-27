@@ -313,6 +313,75 @@ function CreateClientModal({ onClose, onAdd }: { onClose: () => void; onAdd: (c:
   );
 }
 
+// ─── Notes Modal ─────────────────────────────────────────────
+function NotesModal({ client, onClose, onSave }: { client: Client; onClose: () => void; onSave: (id: string, notes: string) => void }) {
+  const [notes, setNotes] = useState(client.notes || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await jaApi.patch(`/clients/${client.id}`, { notes });
+      onSave(client.id, notes);
+      setSuccess(true);
+      setTimeout(onClose, 1000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to save notes");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 animate-in fade-in duration-150">
+      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl animate-in zoom-in-95 duration-150">
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-100">Internal Notes</h3>
+            <p className="text-[11px] text-zinc-500 mt-0.5">{client.name} · {client.email}</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition p-1">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        {success ? (
+          <div className="flex flex-col items-center gap-2 py-6">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15">
+              <svg className="h-5 w-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            </div>
+            <p className="text-sm font-semibold text-emerald-300">Notes saved</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5 group">
+              <label className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-zinc-400 group-focus-within:text-violet-400 transition-colors">Notes</label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Background, target roles, special requirements, or any other context..."
+                rows={6}
+                className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-4 py-2.5 text-sm text-zinc-50 placeholder-zinc-600 outline-none resize-none transition hover:bg-zinc-900/80 focus:border-violet-500/40 focus:bg-zinc-900/80 focus:ring-1 focus:ring-violet-500/20"
+              />
+            </div>
+            {error && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={onClose} className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800/50 py-2.5 text-xs font-semibold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition">Cancel</button>
+              <button type="submit" disabled={saving} className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-2.5 text-xs font-bold text-white shadow-lg shadow-violet-500/20 hover:from-violet-400 hover:to-purple-500 transition disabled:opacity-60">
+                {saving ? "Saving..." : "Save Notes"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────
 export default function ClientsPage() {
   const [clients, setClients]             = useState<Client[]>([]);
@@ -325,6 +394,7 @@ export default function ClientsPage() {
   const [deleteModal, setDeleteModal]     = useState<Client | null>(null);
   const [inviteSent, setInviteSent]       = useState<string | null>(null);
   const [expandedId, setExpandedId]       = useState<string | null>(null);
+  const [notesModal, setNotesModal]       = useState<Client | null>(null);
 
   useEffect(() => {
     jaApi.get<{ clients: Client[] }>("/clients")
@@ -384,6 +454,7 @@ export default function ClientsPage() {
       {passwordModal && <SetPasswordModal     client={passwordModal}                  onClose={() => setPasswordModal(null)}    onSave={handleSetPassword} />}
       {credentialsModal && <ViewCredentialsModal client={credentialsModal}            onClose={() => setCredentialsModal(null)} />}
       {deleteModal   && <DeleteConfirmModal   client={deleteModal}                    onClose={() => setDeleteModal(null)}      onDeleted={handleDeleted} />}
+      {notesModal    && <NotesModal           client={notesModal}                     onClose={() => setNotesModal(null)}       onSave={(id, notes) => setClients(prev => prev.map(c => c.id === id ? { ...c, notes } : c))} />}
 
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -511,6 +582,17 @@ export default function ClientsPage() {
                     <Link href={`/ja-admin/clients/${client.id}`} className="rounded-xl border border-zinc-700 bg-zinc-800/40 px-4 py-2 text-[11px] font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition">
                       View Profile →
                     </Link>
+                    <button
+                      onClick={() => setNotesModal(client)}
+                      className={`inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-[11px] font-bold transition ${
+                        client.notes
+                          ? "border-amber-500/20 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                          : "border-zinc-700 bg-zinc-800/40 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                      }`}
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      {client.notes ? "Edit Notes" : "Add Notes"}
+                    </button>
 
                     {/* Right-side danger actions */}
                     <div className="ml-auto flex items-center gap-2">

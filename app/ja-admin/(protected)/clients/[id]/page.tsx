@@ -12,11 +12,18 @@ export default function ClientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"profile">("profile");
 
+  // Notes editing state
+  const [notesDraft, setNotesDraft] = useState("");
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [notesError, setNotesError] = useState("");
+
   useEffect(() => {
     async function load() {
       try {
         const data = await jaApi.get<Client>(`/clients/${id}`);
         setClient(data);
+        setNotesDraft(data.notes || "");
       } catch (err) {
         console.error("Failed to load client:", err);
       } finally {
@@ -25,6 +32,22 @@ export default function ClientDetailPage() {
     }
     load();
   }, [id]);
+
+  const handleSaveNotes = async () => {
+    if (!client) return;
+    setNotesSaving(true);
+    setNotesError("");
+    try {
+      await jaApi.patch(`/clients/${client.id}`, { notes: notesDraft });
+      setClient(prev => prev ? { ...prev, notes: notesDraft } : prev);
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
+    } catch (err: unknown) {
+      setNotesError(err instanceof Error ? err.message : "Failed to save notes");
+    } finally {
+      setNotesSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -65,7 +88,7 @@ export default function ClientDetailPage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold text-zinc-100">{client.name}</h1>
           <p className="text-sm text-zinc-400 mt-0.5">{client.email} · {client.phone || "—"}</p>
-          {client.notes && <p className="mt-1.5 text-xs text-zinc-500 italic">{client.notes}</p>}
+          {client.notes && <p className="mt-1.5 text-xs text-zinc-500 italic truncate">{client.notes}</p>}
         </div>
         <Link
           href={`/ja-admin/assignments?client=${client.name}`}
@@ -75,7 +98,7 @@ export default function ClientDetailPage() {
         </Link>
       </div>
 
-      {/* Tab bar (only profile for now, search history removed) */}
+      {/* Tab bar */}
       <div className="flex gap-1 rounded-xl bg-zinc-900/50 border border-zinc-800 p-1 w-fit">
         <button
           onClick={() => setActiveTab("profile")}
@@ -87,9 +110,9 @@ export default function ClientDetailPage() {
 
       {/* Profile & Access */}
       {activeTab === "profile" && (
-        <div className="grid gap-4 lg:grid-cols-2 lg:grid-rows-[auto_1fr]">
+        <div className="grid gap-4 lg:grid-cols-2">
           {/* Account Info */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4 lg:col-start-1 lg:row-start-1">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4">
             <h2 className="text-sm font-bold text-zinc-100">Account Information</h2>
             <div className="space-y-3">
               {[
@@ -109,9 +132,8 @@ export default function ClientDetailPage() {
           </div>
 
           {/* Portal Access */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4 lg:col-start-2 lg:row-start-1">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4">
             <h2 className="text-sm font-bold text-zinc-100">Portal Access</h2>
-
             <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 px-4 py-3 space-y-2.5">
               {[
                 { label: "Access Status", value: portalStatusLabel, color: portalStatusColor },
@@ -124,7 +146,6 @@ export default function ClientDetailPage() {
                 </div>
               ))}
             </div>
-
             <div className="flex gap-2 pt-1">
               <button className="flex-1 rounded-xl bg-violet-500/10 border border-violet-500/20 py-2.5 text-xs font-bold text-violet-300 hover:bg-violet-500/20 transition">
                 Reset Password
@@ -136,7 +157,7 @@ export default function ClientDetailPage() {
           </div>
 
           {/* Job Profile & Preferences */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4 lg:col-span-2 lg:row-start-2">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 space-y-4 lg:col-span-2">
             <h2 className="text-sm font-bold text-zinc-100">Job Profile & Preferences</h2>
             <div className="grid gap-x-12 gap-y-3 sm:grid-cols-2">
               {[
@@ -152,7 +173,6 @@ export default function ClientDetailPage() {
                   <span className="text-sm font-medium text-zinc-200">{row.value || <span className="text-zinc-600 italic text-xs">Not specified</span>}</span>
                 </div>
               ))}
-              
               <div className="flex flex-col gap-1 border-b border-zinc-800/50 pb-2 sm:col-span-2">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-zinc-500">LinkedIn Profile</span>
                 <span className="text-sm font-medium text-zinc-200">
@@ -165,6 +185,43 @@ export default function ClientDetailPage() {
                   )}
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* Internal Notes — editable */}
+          <div className="rounded-2xl border border-amber-500/15 bg-amber-500/5 p-6 space-y-4 lg:col-span-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                <svg className="h-4 w-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Internal Notes
+              </h2>
+              <span className="text-[10px] text-zinc-600 italic">Only visible to JA staff</span>
+            </div>
+            <textarea
+              value={notesDraft}
+              onChange={e => { setNotesDraft(e.target.value); setNotesSaved(false); }}
+              placeholder="Background, target roles, special requirements, or any other internal context..."
+              rows={5}
+              className="w-full rounded-xl border border-white/5 bg-zinc-900/50 px-4 py-3 text-sm text-zinc-50 placeholder-zinc-600 outline-none resize-none transition hover:bg-zinc-900/80 focus:border-amber-500/30 focus:bg-zinc-900/80 focus:ring-1 focus:ring-amber-500/10"
+            />
+            {notesError && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{notesError}</p>}
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] text-zinc-600">{notesDraft.length} characters</p>
+              <button
+                onClick={handleSaveNotes}
+                disabled={notesSaving || notesDraft === (client.notes || "")}
+                className={`inline-flex items-center gap-2 rounded-xl px-5 py-2 text-xs font-bold transition disabled:opacity-50 ${
+                  notesSaved
+                    ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
+                    : "bg-gradient-to-r from-amber-500/80 to-orange-500/80 text-white hover:from-amber-500 hover:to-orange-500 shadow-lg shadow-amber-500/10"
+                }`}
+              >
+                {notesSaved ? (
+                  <><svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Saved</>
+                ) : notesSaving ? "Saving..." : "Save Notes"}
+              </button>
             </div>
           </div>
 

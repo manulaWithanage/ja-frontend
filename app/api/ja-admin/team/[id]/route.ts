@@ -15,3 +15,11 @@ export async function PATCH(
   }
   return proxyRequest(req, `/api/ja-admin/team/${id}`, { method: "PATCH" });
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  return proxyRequest(req, `/api/ja-admin/team/${id}`, { method: "DELETE" });
+}

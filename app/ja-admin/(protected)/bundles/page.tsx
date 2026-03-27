@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { jaApi } from "../../../lib/jaApi";
 import type { Job, Client } from "../../../types/ja-admin";
 
@@ -33,6 +33,16 @@ export default function BundleSearchPage() {
   const [bundleJobs, setBundleJobs] = useState<Job[]>([]);
   const [clientName, setClientName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [availableBundles, setAvailableBundles] = useState<{id: string, date?: string}[]>([]);
+  const [showBundles, setShowBundles] = useState(false);
+
+  // Fetch available bundles on mount
+  useEffect(() => {
+    jaApi.get<{ bundles: {id: string, date?: string}[] }>("/jobs/bundles")
+      .then(d => setAvailableBundles(d.bundles || []))
+      .catch(e => console.error("Failed to fetch available bundles:", e));
+  }, []);
 
   const updateJobStatus = async (id: string, status: Job["status"]) => {
     try {
@@ -89,13 +99,102 @@ export default function BundleSearchPage() {
     }
   };
 
+  const downloadCSV = () => {
+    if (bundleJobs.length === 0) return;
+
+    const escape = (val: string | undefined | null) => {
+      if (val == null) return "";
+      const s = String(val);
+      if (s.includes(",") || s.includes("\"") || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+
+    const headers = ["Job Title", "Company", "Location", "Status", "Week ID", "Source", "Apply Link", "Date Added"];
+    const rows = bundleJobs.map(job => [
+      escape(job.job_title),
+      escape(job.company),
+      escape(job.location || "Remote"),
+      escape(job.status),
+      escape(job.week_id),
+      escape(job.source === "client_selected" ? "Client Request" : "JA Selected"),
+      escape(job.apply_link),
+      escape(job.created_at ? new Date(job.created_at).toLocaleDateString("en-US") : ""),
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `bundle-${searchInput.trim()}-${clientName ? clientName.replace(/\s+/g, "_") : "jobs"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-8 animate-in fade-in duration-500 pb-12">
       {/* Hero Search */}
-      <div className="rounded-3xl border border-zinc-800 bg-zinc-950/50 p-8 text-center relative overflow-hidden shadow-xl shadow-black/50">
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-violet-500/5 pointer-events-none" />
+      <div className="rounded-3xl border border-zinc-800 bg-zinc-950/50 p-8 text-center relative shadow-xl shadow-black/50">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-violet-500/5 pointer-events-none rounded-3xl" />
         
-        <div className="mx-auto w-12 h-12 flex items-center justify-center rounded-xl bg-violet-500/10 mb-4 border border-violet-500/20 shadow-inner shadow-violet-500/20 relative z-10">
+        {/* Top Right Available Bundles Icon */}
+        <div className="absolute top-6 right-6 z-30">
+          <button
+            type="button"
+            onClick={() => setShowBundles(!showBundles)}
+            title="View Available Bundles"
+            className={`p-2.5 rounded-xl border transition-all duration-300 shadow-xl ${
+              showBundles 
+                ? 'bg-violet-600 border-violet-500 text-white shadow-violet-500/20' 
+                : 'bg-zinc-900/80 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-700'
+            }`}
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            {availableBundles.length > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-emerald-500 text-[9px] font-black text-white px-1 shadow-sm border border-emerald-400">
+                {availableBundles.length}
+              </span>
+            )}
+          </button>
+
+          {showBundles && availableBundles.length > 0 && (
+            <div className="absolute right-0 top-full mt-3 w-72 rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3 bg-zinc-900/50 rounded-t-2xl">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-300">Available Bundles</h3>
+                <span className="text-[10px] text-zinc-500">{availableBundles.length} Total</span>
+              </div>
+              <div className="max-h-80 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+                <div className="flex flex-col gap-1">
+                  {availableBundles.map(b => (
+                    <button
+                      key={b.id}
+                      onClick={() => {
+                        setSearchInput(b.id);
+                        setShowBundles(false);
+                      }}
+                      className="flex items-center justify-between text-left rounded-xl px-3 py-2.5 hover:bg-violet-500/10 hover:border-violet-500/30 transition border border-transparent group"
+                    >
+                      <span className="font-mono font-bold text-zinc-300 group-hover:text-violet-300 transition text-xs">
+                        {b.id}
+                      </span>
+                      {b.date && (
+                        <span className="text-[10px] text-zinc-500 group-hover:text-violet-400 transition ml-2 whitespace-nowrap">
+                          {new Date(b.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric'})}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        <div className="mx-auto w-12 h-12 flex items-center justify-center rounded-xl bg-violet-500/10 mb-4 border border-violet-500/20 shadow-inner shadow-violet-500/20 relative z-10 mt-2">
           <svg className="h-6 w-6 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
           </svg>
@@ -155,6 +254,17 @@ export default function BundleSearchPage() {
               {bundleJobs.some(j => j.status === "assigned" || j.status === "batch_active") && (
                 <button onClick={markAllApplied} className="text-[10px] font-bold text-zinc-400 hover:text-violet-300 transition uppercase tracking-widest flex items-center gap-1.5 bg-transparent hover:bg-violet-500/10 px-3 py-1.5 rounded-lg border border-transparent hover:border-violet-500/20">
                   Mark All Applied <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                </button>
+              )}
+              {bundleJobs.length > 0 && (
+                <button
+                  onClick={downloadCSV}
+                  className="text-[10px] font-bold text-emerald-400 hover:text-emerald-300 transition uppercase tracking-widest flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded-lg border border-emerald-500/20 hover:border-emerald-500/30"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  Download CSV
                 </button>
               )}
               <span className="text-[10px] font-bold uppercase tracking-widest text-violet-300 bg-violet-500/10 px-3 py-1.5 rounded-lg border border-violet-500/20 shadow-inner shadow-black/20 shrink-0">
