@@ -8,16 +8,26 @@ import type { DashboardStats, Client } from "../../../types/ja-admin";
 export default function JaAdminDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
+  const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
-        const statsData = await jaApi.get<DashboardStats>("/dashboard/stats");
-        const clientsResponse = await jaApi.get<{ clients: Client[] }>("/clients");
-        
-        setStats(statsData);
-        setClients((clientsResponse.clients || []).slice(0, 5));
+        const [statsRes, clientsRes, activityRes] = await Promise.allSettled([
+          jaApi.get<DashboardStats>("/dashboard/stats"),
+          jaApi.get<{ clients: Client[] }>("/clients"),
+          jaApi.get<{ activity: any[] }>("/dashboard/activity?limit=5")
+        ]);
+
+        if (statsRes.status === "fulfilled") setStats(statsRes.value);
+        else console.error("Failed to load stats:", statsRes.reason);
+
+        if (clientsRes.status === "fulfilled") setClients((clientsRes.value.clients || []).slice(0, 5));
+        else console.error("Failed to load clients:", clientsRes.reason);
+
+        if (activityRes.status === "fulfilled") setRecentActivities(activityRes.value.activity || []);
+        else console.error("Failed to load activity:", activityRes.reason);
       } catch (err) {
         console.error("Dashboard load error:", err);
       } finally {
@@ -26,14 +36,6 @@ export default function JaAdminDashboard() {
     }
     load();
   }, []);
-
-  const RECENT_ACTIVITY = [
-    { time: "16:23", client: "John Doe", action: "AI Agent search run", detail: "7 results · 2 assigned", color: "violet" },
-    { time: "15:01", client: "Aisha Okonkwo", action: "Job offer received", detail: "Databricks — Data Engineer", color: "emerald" },
-    { time: "14:40", client: "Sarah Mitchell", action: "AI Agent search run", detail: "9 results · 2 assigned", color: "violet" },
-    { time: "12:15", client: "Aisha Okonkwo", action: "Application submitted", detail: "Snowflake — Senior Data Engineer", color: "sky" },
-    { time: "09:30", client: "John Doe", action: "Application submitted", detail: "Vercel — Staff Frontend Engineer", color: "sky" },
-  ];
 
   const statCards = [
     { label: "Total Clients", value: stats?.totalClients ?? "—", sub: `${stats?.activeClients ?? 0} active`, color: "violet", icon: "👥" },
@@ -136,21 +138,32 @@ export default function JaAdminDashboard() {
             <span className="text-[10px] text-zinc-500">Today</span>
           </div>
           <div className="px-4 py-3 space-y-1">
-            {RECENT_ACTIVITY.map((event, i) => (
-              <div key={i} className="flex gap-3 rounded-xl px-3 py-3 hover:bg-zinc-800/30 transition">
-                <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
-                  <span className={`h-2 w-2 rounded-full
+            {recentActivities.length === 0 ? (
+              <div className="px-6 py-8 text-center text-sm text-zinc-500 italic">No recent activity.</div>
+            ) : recentActivities.map((event, i) => (
+              <div key={i} className="flex gap-4 rounded-xl px-0 py-2 transition relative group">
+                {/* Timeline vertical line */}
+                {i < recentActivities.length - 1 && (
+                  <div className="absolute left-[20px] top-[24px] bottom-[-8px] w-px bg-zinc-800/80 group-hover:bg-zinc-700 transition-colors" />
+                )}
+                
+                {/* Timeline dot */}
+                <div className="relative z-10 flex h-6 w-10 shrink-0 items-center justify-center pt-1.5">
+                  <div className={`h-[7px] w-[7px] shrink-0 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] ring-2 ring-zinc-950
                     ${event.color === "violet" ? "bg-violet-400" :
                       event.color === "emerald" ? "bg-emerald-400" :
                       "bg-sky-400"}`} />
-                  {i < RECENT_ACTIVITY.length - 1 && <div className="w-px flex-1 bg-zinc-800" />}
                 </div>
-                <div className="flex-1 min-w-0 pb-2">
-                  <p className="text-[11px] font-semibold text-zinc-200">{event.client}</p>
-                  <p className="text-[10px] text-zinc-400">{event.action}</p>
-                  <p className="text-[10px] text-zinc-600 mt-0.5">{event.detail}</p>
+                
+                {/* Content */}
+                <div className="flex-1 min-w-0 pb-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[13px] font-bold text-zinc-200">{event.client}</p>
+                    <span className="text-[11px] text-zinc-500 font-medium tracking-wide">{event.time}</span>
+                  </div>
+                  <p className="text-[12px] text-zinc-400 mt-0.5 font-medium">{event.action}</p>
+                  <p className="text-[11px] text-zinc-600 mt-1">{event.detail}</p>
                 </div>
-                <span className="text-[10px] text-zinc-600 shrink-0">{event.time}</span>
               </div>
             ))}
           </div>
