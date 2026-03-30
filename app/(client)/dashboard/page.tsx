@@ -54,10 +54,10 @@ export default function DashboardPage() {
         const jobsArray = Array.isArray(jobsRes)
           ? jobsRes
           : Array.isArray(jobsRes?.jobs)
-          ? jobsRes.jobs
-          : Array.isArray(jobsRes?.data)
-          ? jobsRes.data
-          : [];
+            ? jobsRes.jobs
+            : Array.isArray(jobsRes?.data)
+              ? jobsRes.data
+              : [];
         setJobs(jobsArray);
         if (statsRes) setStats(statsRes);
 
@@ -167,7 +167,7 @@ export default function DashboardPage() {
       {/* Assigned Jobs Section */}
       <div>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-zinc-100">Jobs Assigned to You</h2>
+          <h2 className="text-lg font-semibold text-zinc-100">Jobs Assigned</h2>
           <Link
             href="/tracker"
             className="text-xs font-medium text-emerald-400 hover:text-emerald-300 transition"

@@ -11,14 +11,33 @@ export interface JaUser {
   role: "admin" | "member";
 }
 
+function getCookie(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  if (match) return decodeURIComponent(match[2]);
+  return null;
+}
+
+function setCookie(name: string, value: string, days = 7) {
+  if (typeof window === "undefined") return;
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/';
+}
+
+function deleteCookie(name: string) {
+  if (typeof window === "undefined") return;
+  document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+}
+
 export function getJaToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(JA_TOKEN_KEY);
+  return getCookie(JA_TOKEN_KEY) || localStorage.getItem(JA_TOKEN_KEY);
 }
 
 export function setJaToken(token: string, tokenType: string = "bearer", user?: JaUser): void {
   localStorage.setItem(JA_TOKEN_KEY, token);
   localStorage.setItem(JA_TOKEN_TYPE_KEY, tokenType);
+  setCookie(JA_TOKEN_KEY, token);
   if (user) {
     localStorage.setItem(JA_USER_KEY, JSON.stringify(user));
   }
@@ -39,6 +58,7 @@ export function clearJaToken(): void {
   localStorage.removeItem(JA_TOKEN_KEY);
   localStorage.removeItem(JA_TOKEN_TYPE_KEY);
   localStorage.removeItem(JA_USER_KEY);
+  deleteCookie(JA_TOKEN_KEY);
 }
 
 export function isJaAuthenticated(): boolean {

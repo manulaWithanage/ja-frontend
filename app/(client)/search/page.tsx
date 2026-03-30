@@ -277,6 +277,7 @@ export default function ClientSearchPage() {
   // Search attempt states — 3 attempts per week, pick up to 15 jobs
   const [searchAttemptsUsed, setSearchAttemptsUsed] = useState<number>(0);
   const [maxSearchAttempts, setMaxSearchAttempts] = useState<number>(3);
+  const [isStatsLoading, setIsStatsLoading] = useState<boolean>(true);
 
   // Search History & Cache
   const [searchHistory, setSearchHistory] = useState<{
@@ -368,6 +369,8 @@ export default function ClientSearchPage() {
         }
       } catch (e) {
         console.warn("Could not reach backend for stats/history — using local fallback", e);
+      } finally {
+        setIsStatsLoading(false);
       }
     })();
   }, []);
@@ -391,23 +394,34 @@ export default function ClientSearchPage() {
       return updated;
     });
 
-    // Fire-and-forget persist to backend (non-blocking)
+    // Persist to backend and update stats
     (async () => {
       try {
         const { getClientToken } = await import("../../lib/clientAuth");
         const token = getClientToken();
-        await fetch("/api/client/search-history", {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          ...(token && { Authorization: `Bearer ${token}` }),
+        };
+
+        const res = await fetch("/api/client/search-history", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
+          headers,
           body: JSON.stringify({
             query_params: currentForm,
             results: newJobs,
             service,
           }),
         });
+
+        if (res.ok) {
+          // Re-sync quota from backend to ensure exactness
+          const statsRes = await fetch("/api/client/jobs/stats", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+          if (statsRes.ok) {
+            const stats = await statsRes.json();
+            setSearchAttemptsUsed(stats.search_attempts_used ?? 0);
+          }
+        }
       } catch { /* non-critical */ }
     })();
   };
@@ -767,6 +781,7 @@ export default function ClientSearchPage() {
       setError(message);
       setJobs([]);
       setSearchProgress(null);
+      setSearchAttemptsUsed(prev => Math.max(0, prev - 1)); // rollback optimistic increment
     } finally {
       setLoading(false);
     }
@@ -796,7 +811,7 @@ export default function ClientSearchPage() {
   };
 
   const searchAttemptsExhausted = searchAttemptsUsed >= maxSearchAttempts;
-  const disabledSearch = loading || !formData.jobTitle.trim() || searchAttemptsExhausted;
+  const disabledSearch = isStatsLoading || loading || !formData.jobTitle.trim() || searchAttemptsExhausted;
 
   return (
     <div className="mx-auto flex lg:h-[calc(100vh-104px)] min-h-[calc(100vh-104px)] max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -1195,104 +1210,132 @@ export default function ClientSearchPage() {
 
             <div className="mt-4 pt-4 border-t border-white/5 flex flex-col xl:flex-row xl:items-center gap-4 justify-between">
               <div className="flex items-center">
-                <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${
-                  searchAttemptsExhausted
-                    ? 'border-red-500/30 bg-red-500/10 text-red-400'
-                    : 'border-zinc-700 bg-zinc-800/80 text-zinc-300'
-                }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${searchAttemptsExhausted ? 'bg-red-400' : 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,1)]'}`} />
-                  {searchAttemptsUsed} / {maxSearchAttempts} searches used
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 w-full xl:w-auto">              <button
-                onClick={() => {
-                  if (loading && activeService === "linkedin") {
-                    handleStopSearch();
-                  } else {
-                    handleSearch("linkedin");
-                  }
-                }}
-                disabled={
-                  disabledSearch && !(loading && activeService === "linkedin")
-                }
-                className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                  loading && activeService === "linkedin"
-                    ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
-                    : "border-indigo-400/60 bg-slate-900/70 shadow-[0_10px_30px_rgba(30,64,175,0.75)] hover:border-sky-400/70 hover:bg-slate-900/80"
-                }`}
-              >
-                {loading && activeService === "linkedin" ? (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-red-400" />
-                    <span className="cursor-pointer">Stop</span>
+                {isStatsLoading ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 h-[30px] w-[140px] animate-pulse">
+                    <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
+                    <span className="h-2 w-20 rounded bg-zinc-700" />
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-                    <span className="cursor-pointer">Search via LinkedIn</span>
+                  <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${
+                    searchAttemptsExhausted
+                      ? 'border-red-500/30 bg-red-500/10 text-red-400'
+                      : 'border-zinc-700 bg-zinc-800/80 text-zinc-300'
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${searchAttemptsExhausted ? 'bg-red-400' : 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,1)]'}`} />
+                    {searchAttemptsUsed} / {maxSearchAttempts} searches used
                   </span>
                 )}
-              </button>
-                <button
-                  onClick={() => {
-                    if (loading && activeService === "jsearch") {
-                      handleStopSearch();
-                    } else {
-                      handleSearch("jsearch");
-                    }
-                  }}
-                  disabled={
-                    disabledSearch && !(loading && activeService === "jsearch")
-                  }
-                  className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                    loading && activeService === "jsearch"
-                      ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
-                      : "border-sky-400/60 bg-slate-900/60 shadow-[0_10px_35px_rgba(56,189,248,0.85)] hover:border-sky-400/80 hover:bg-slate-900/70"
-                  }`}
-                >
-                  {loading && activeService === "jsearch" ? (
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-red-400" />
-                      <span className="cursor-pointer">Stop</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_14px_rgba(56,189,248,1)]" />
-                      <span className="cursor-pointer">Search via JSearch</span>
-                    </span>
-                  )}
-                </button>
+              </div>
 
-                <button
-                  onClick={() => {
-                    if (loading && activeService === "indeed") {
-                      handleStopSearch();
-                    } else {
-                      handleSearch("indeed");
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 w-full xl:w-auto">                <div className="group relative w-full">
+                  <button
+                    onClick={() => {
+                      if (loading && activeService === "linkedin") {
+                        handleStopSearch();
+                      } else {
+                        handleSearch("linkedin");
+                      }
+                    }}
+                    disabled={
+                      disabledSearch && !(loading && activeService === "linkedin")
                     }
-                  }}
-                  disabled={
-                    disabledSearch && !(loading && activeService === "indeed")
-                  }
-                  className={`inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                    loading && activeService === "indeed"
-                      ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
-                      : "border-emerald-400/60 bg-slate-900/60 shadow-[0_10px_30px_rgba(6,95,70,0.85)] hover:border-emerald-400/80 hover:bg-slate-900/70"
-                  }`}
-                >
-                  {loading && activeService === "indeed" ? (
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-red-400" />
-                      <span className="cursor-pointer">Stop</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-2">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      <span className="cursor-pointer">Search via Indeed</span>
-                    </span>
+                    className={`w-full inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      loading && activeService === "linkedin"
+                        ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
+                        : "border-indigo-400/60 bg-slate-900/70 shadow-[0_10px_30px_rgba(30,64,175,0.75)] hover:border-sky-400/70 hover:bg-slate-900/80"
+                    }`}
+                  >
+                    {loading && activeService === "linkedin" ? (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-red-400" />
+                        <span className="cursor-pointer">Stop</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+                        <span className="cursor-pointer">Search via LinkedIn</span>
+                      </span>
+                    )}
+                  </button>
+                  {searchAttemptsExhausted && (
+                    <div className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 shadow-xl border border-zinc-700">
+                      Weekly search limit reached.
+                    </div>
                   )}
-                </button>
+                </div>
+                <div className="group relative w-full">
+                  <button
+                    onClick={() => {
+                      if (loading && activeService === "jsearch") {
+                        handleStopSearch();
+                      } else {
+                        handleSearch("jsearch");
+                      }
+                    }}
+                    disabled={
+                      disabledSearch && !(loading && activeService === "jsearch")
+                    }
+                    className={`w-full inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      loading && activeService === "jsearch"
+                        ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
+                        : "border-sky-400/60 bg-slate-900/60 shadow-[0_10px_35px_rgba(56,189,248,0.85)] hover:border-sky-400/80 hover:bg-slate-900/70"
+                    }`}
+                  >
+                    {loading && activeService === "jsearch" ? (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-red-400" />
+                        <span className="cursor-pointer">Stop</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_14px_rgba(56,189,248,1)]" />
+                        <span className="cursor-pointer">Search via JSearch</span>
+                      </span>
+                    )}
+                  </button>
+                  {searchAttemptsExhausted && (
+                    <div className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 shadow-xl border border-zinc-700">
+                      Weekly search limit reached.
+                    </div>
+                  )}
+                </div>
+
+                <div className="group relative w-full">
+                  <button
+                    onClick={() => {
+                      if (loading && activeService === "indeed") {
+                        handleStopSearch();
+                      } else {
+                        handleSearch("indeed");
+                      }
+                    }}
+                    disabled={
+                      disabledSearch && !(loading && activeService === "indeed")
+                    }
+                    className={`w-full inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      loading && activeService === "indeed"
+                        ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
+                        : "border-emerald-400/60 bg-slate-900/60 shadow-[0_10px_30px_rgba(6,95,70,0.85)] hover:border-emerald-400/80 hover:bg-slate-900/70"
+                    }`}
+                  >
+                    {loading && activeService === "indeed" ? (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-red-400" />
+                        <span className="cursor-pointer">Stop</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        <span className="cursor-pointer">Search via Indeed</span>
+                      </span>
+                    )}
+                  </button>
+                  {searchAttemptsExhausted && (
+                    <div className="pointer-events-none absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 opacity-0 transition-opacity group-hover:opacity-100 shadow-xl border border-zinc-700">
+                      Weekly search limit reached.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useSyncExternalStore, useEffect } from "react";
+import { useEffect, useState } from "react";
 import ClientSidebar from "../components/ClientSidebar";
 import { clearClientToken } from "../lib/clientAuth";
 
@@ -10,12 +10,9 @@ function subscribe(callback: () => void) {
   return () => window.removeEventListener("storage", callback);
 }
 
-function getSnapshot(): boolean {
-  return !!localStorage.getItem("client_access_token");
-}
-
-function getServerSnapshot(): boolean {
-  return false;
+function getClientAuthStatus(): boolean {
+  if (typeof window === "undefined") return true; // Assume true on server to prevent flash
+  return !!document.cookie.match(new RegExp('(^| )client_access_token=([^;]+)')) || !!localStorage.getItem("client_access_token");
 }
 
 export default function ClientLayout({
@@ -24,32 +21,39 @@ export default function ClientLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const isAuthed = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const [isMounted, setIsMounted] = useState(false);
+  const [isAuthed, setIsAuthed] = useState(true);
 
   useEffect(() => {
+    const checkAuth = () => {
+      const authed = getClientAuthStatus();
+      setIsAuthed(authed);
+      setIsMounted(true);
+      if (!authed) {
+        router.push("/login");
+      }
+    };
+
+    checkAuth();
+
     const handleUnauthorized = () => {
       clearClientToken();
-      window.dispatchEvent(new Event("storage"));
+      setIsAuthed(false);
+      router.push("/login");
     };
 
     window.addEventListener("auth:unauthorized", handleUnauthorized as EventListener);
+    window.addEventListener("storage", checkAuth);
+
     return () => {
       window.removeEventListener("auth:unauthorized", handleUnauthorized as EventListener);
+      window.removeEventListener("storage", checkAuth);
     };
-  }, []);
+  }, [router]);
 
-  if (typeof window !== "undefined" && !isAuthed) {
-    router.push("/login");
+  if (!isMounted || !isAuthed) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-500 border-t-zinc-200" />
-      </div>
-    );
-  }
-
-  if (!isAuthed) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-500 border-t-zinc-200" />
       </div>
     );

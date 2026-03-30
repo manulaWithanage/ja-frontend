@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { setAdminToken } from "../../lib/adminAuth";
 
 interface LoginFormData {
   username: string;
@@ -58,8 +59,7 @@ export default function LoginPage() {
       }
 
       // Store the token
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("token_type", data.token_type);
+      setAdminToken(data.access_token);
 
       setSuccess(true);
 

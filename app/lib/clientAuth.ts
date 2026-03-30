@@ -4,19 +4,39 @@
 const CLIENT_TOKEN_KEY = "client_access_token";
 const CLIENT_TOKEN_TYPE_KEY = "client_token_type";
 
+function getCookie(name: string): string | null {
+  if (typeof window === "undefined") return null;
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  if (match) return decodeURIComponent(match[2]);
+  return null;
+}
+
+function setCookie(name: string, value: string, days = 7) {
+  if (typeof window === "undefined") return;
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/';
+}
+
+function deleteCookie(name: string) {
+  if (typeof window === "undefined") return;
+  document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+}
+
 export function getClientToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(CLIENT_TOKEN_KEY);
+  return getCookie(CLIENT_TOKEN_KEY) || localStorage.getItem(CLIENT_TOKEN_KEY);
 }
 
 export function setClientToken(token: string, tokenType: string = "bearer"): void {
   localStorage.setItem(CLIENT_TOKEN_KEY, token);
   localStorage.setItem(CLIENT_TOKEN_TYPE_KEY, tokenType);
+  setCookie(CLIENT_TOKEN_KEY, token);
 }
 
 export function clearClientToken(): void {
   localStorage.removeItem(CLIENT_TOKEN_KEY);
   localStorage.removeItem(CLIENT_TOKEN_TYPE_KEY);
+  deleteCookie(CLIENT_TOKEN_KEY);
 }
 
 export function isClientAuthenticated(): boolean {
