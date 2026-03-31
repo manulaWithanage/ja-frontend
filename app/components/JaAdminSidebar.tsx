@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { clearJaToken, getJaUser } from "../lib/jaAuth";
 import { useEffect, useState } from "react";
 
-export default function JaAdminSidebar({ isOpen = false, onClose = () => {} }: { isOpen?: boolean; onClose?: () => void }) {
+export default function JaAdminSidebar({ isOpen = false, onClose = () => { } }: { isOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<{ name: string; email: string; role: string } | null>(null);
@@ -50,6 +50,15 @@ export default function JaAdminSidebar({ isOpen = false, onClose = () => {} }: {
     },
     ...(user?.role === "admin" ? [
       {
+        href: "/ja-admin/search",
+        label: "JA Search",
+        icon: (
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+        ),
+      },
+      {
         href: "/ja-admin/clients",
         label: "Client Accounts",
         icon: (
@@ -73,84 +82,81 @@ export default function JaAdminSidebar({ isOpen = false, onClose = () => {} }: {
   return (
     <>
       {/* Mobile backdrop */}
-      <div 
-        className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${
-          isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`} 
+      <div
+        className={`fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
         onClick={onClose}
       />
-      <aside 
-        className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-64 shrink-0 flex-col border-r border-zinc-800/60 bg-zinc-950 transition-transform duration-300 lg:static lg:translate-x-0 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-64 shrink-0 flex-col border-r border-zinc-800/60 bg-zinc-950 transition-transform duration-300 lg:static lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
-      {/* Brand */}
-      <div className="flex items-center gap-3 px-5 py-6 border-b border-zinc-800/60">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/20 border border-violet-500/30">
-          <svg className="h-4 w-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-          </svg>
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold tracking-[0.15em] text-violet-400">TheJobHelpers</p>
-          <p className="truncate text-sm font-bold text-zinc-100">JA Internal</p>
-        </div>
-        <span className="ml-auto rounded bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-400">
-          Staff
-        </span>
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onClose}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                isActive
-                  ? "bg-violet-500/15 text-violet-200 border border-violet-500/20"
-                  : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
-              }`}
-            >
-              <span className={isActive ? "text-violet-400" : "text-zinc-500"}>
-                {item.icon}
-              </span>
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-
-      {/* Footer — user + logout */}
-      <div className="border-t border-zinc-800/60 px-4 py-4 space-y-2">
-        <div className="flex items-center gap-3 rounded-xl bg-zinc-900/60 px-3 py-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-500/20 text-[11px] font-bold text-violet-300 uppercase">
-            {user?.name?.slice(0, 2) || "JA"}
+        {/* Brand */}
+        <div className="flex items-center gap-3 px-5 py-6 border-b border-zinc-800/60">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/20 border border-violet-500/30">
+            <svg className="h-4 w-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+            </svg>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-zinc-200 truncate">{user?.name || "Staff Member"}</p>
-            <p className="text-[10px] text-zinc-500 truncate">{user?.email || "internal@jateam.com"}</p>
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold tracking-[0.15em] text-violet-400">TheJobHelpers</p>
+            <p className="truncate text-sm font-bold text-zinc-100">JA Internal</p>
           </div>
-          {user?.role === "admin" && (
-            <div className="px-1.5 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[8px] font-black text-violet-400 uppercase tracking-tighter">
-              Admin
+          <span className="ml-auto rounded bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-400">
+            Staff
+          </span>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+          {navItems.map((item) => {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${isActive
+                    ? "bg-violet-500/15 text-violet-200 border border-violet-500/20"
+                    : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200"
+                  }`}
+              >
+                <span className={isActive ? "text-violet-400" : "text-zinc-500"}>
+                  {item.icon}
+                </span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Footer — user + logout */}
+        <div className="border-t border-zinc-800/60 px-4 py-4 space-y-2">
+          <div className="flex items-center gap-3 rounded-xl bg-zinc-900/60 px-3 py-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-500/20 text-[11px] font-bold text-violet-300 uppercase">
+              {user?.name?.slice(0, 2) || "JA"}
             </div>
-          )}
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-zinc-200 truncate">{user?.name || "Staff Member"}</p>
+              <p className="text-[10px] text-zinc-500 truncate">{user?.email || "internal@jateam.com"}</p>
+            </div>
+            {user?.role === "admin" && (
+              <div className="px-1.5 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[8px] font-black text-violet-400 uppercase tracking-tighter">
+                Admin
+              </div>
+            )}
+          </div>
+          <button
+            onClick={handleLogout}
+            className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+            </svg>
+            Sign Out
+          </button>
         </div>
-        <button
-          onClick={handleLogout}
-          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400"
-        >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-          </svg>
-          Sign Out
-        </button>
-      </div>
-    </aside>
+      </aside>
     </>
   );
 }
