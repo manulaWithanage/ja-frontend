@@ -606,13 +606,28 @@ export default function ClientSearchPage() {
   ) => {
     const { name, value } = e.target;
 
-    // Prevent negative values for salary fields
-    if ((name === "salaryMin" || name === "salaryMax") && value !== "") {
-      const numValue = parseFloat(value);
-      if (numValue < 0) {
-        // Don't update if negative value
+    // Handle salary formatting with commas
+    if (name === "salaryMin" || name === "salaryMax") {
+      if (value === "") {
+        setFormData((prev: FormData) => ({
+          ...prev,
+          [name]: value,
+        }));
         return;
       }
+      
+      const rawValue = value.replace(/\D/g, "");
+      if (rawValue === "") return;
+      
+      const numValue = parseInt(rawValue, 10);
+      if (numValue < 0) return;
+      
+      const formattedValue = new Intl.NumberFormat("en-US").format(numValue);
+      setFormData((prev: FormData) => ({
+        ...prev,
+        [name]: formattedValue,
+      }));
+      return;
     }
 
     setFormData((prev: FormData) => ({
@@ -643,6 +658,12 @@ export default function ClientSearchPage() {
     }
 
     try {
+      const searchPayload = {
+        ...formData,
+        salaryMin: formData.salaryMin ? formData.salaryMin.replace(/,/g, "") : "",
+        salaryMax: formData.salaryMax ? formData.salaryMax.replace(/,/g, "") : "",
+      };
+
       // Use SSE streaming for all services
       // Create abort controller for this request
       const abortController = new AbortController();
@@ -661,7 +682,7 @@ export default function ClientSearchPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(searchPayload),
           signal: abortController.signal,
         });
 
@@ -763,7 +784,7 @@ export default function ClientSearchPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(searchPayload),
         });
 
         const data = await response.json();
@@ -997,14 +1018,12 @@ export default function ClientSearchPage() {
                   Min salary (USD)
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   id="salaryMin"
                   name="salaryMin"
                   value={formData.salaryMin}
                   onChange={handleInputChange}
                   placeholder="80,000"
-                  min="0"
-                  step="1000"
                   className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50"
                 />
               </div>
@@ -1017,14 +1036,12 @@ export default function ClientSearchPage() {
                   Max salary (USD)
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   id="salaryMax"
                   name="salaryMax"
                   value={formData.salaryMax}
                   onChange={handleInputChange}
                   placeholder="220,000"
-                  min="0"
-                  step="1000"
                   className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50"
                 />
               </div>
@@ -1067,7 +1084,7 @@ export default function ClientSearchPage() {
                   className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-500/50"
                 >
                   <option value="">Any time</option>
-                  <option value="day">Past 24 hours</option>
+                  <option value="today">Past 24 hours</option>
                   <option value="week">Past week</option>
                   <option value="month">Past month</option>
                 </select>
