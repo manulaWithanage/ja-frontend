@@ -25,6 +25,7 @@ interface FormData {
   salaryMin: string;
   salaryMax: string;
   jobType: string;
+  employmentType: string;
   city: string;
   country: string;
   datePosted: string;
@@ -83,8 +84,10 @@ export default function AdminSearchPage() {
 
   const [formData, setFormData] = useState<FormData>({
     jobTitle: "", industry: "", salaryMin: "", salaryMax: "",
-    jobType: "", city: "", country: "", datePosted: "",
+    jobType: "", employmentType: "", city: "", country: "", datePosted: "",
   });
+
+  const [selectedSource, setSelectedSource] = useState<"jsearch" | "indeed" | "linkedin" | null>(null);
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
@@ -280,6 +283,7 @@ export default function AdminSearchPage() {
         ...formData,
         salaryMin: formData.salaryMin ? formData.salaryMin.replace(/,/g, "") : "",
         salaryMax: formData.salaryMax ? formData.salaryMax.replace(/,/g, "") : "",
+        employmentType: formData.employmentType || "",
       };
 
       const abortController = new AbortController();
@@ -479,7 +483,44 @@ export default function AdminSearchPage() {
               </div>
             </div>
 
-            <div className="space-y-4 rounded-2xl border border-white/5 bg-black/40 p-4 sm:p-5">
+            {/* Source Selector */}
+            <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Step 1 — Select search source</p>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { key: "jsearch" as const, label: "JSearch", color: "sky", dot: "bg-sky-400 shadow-[0_0_14px_rgba(56,189,248,1)]" },
+                  { key: "linkedin" as const, label: "LinkedIn", color: "indigo", dot: "bg-indigo-400" },
+                  { key: "indeed" as const, label: "Indeed", color: "emerald", dot: "bg-emerald-400" },
+                ] as const).map((src) => (
+                  <button key={src.key} type="button"
+                    onClick={() => {
+                      setSelectedSource(src.key);
+                      // Reset filters that the new source doesn't support
+                      setFormData(prev => ({
+                        ...prev,
+                        jobType: "",
+                        employmentType: "",
+                        ...(src.key === "indeed" ? { salaryMin: "", salaryMax: "", industry: "" } : {}),
+                        ...(src.key === "linkedin" ? { salaryMin: "", salaryMax: "" } : {}),
+                      }));
+                    }}
+                    className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                      selectedSource === src.key
+                        ? `border-${src.color}-400/60 bg-${src.color}-500/20 text-${src.color}-200 ring-2 ring-${src.color}-500/30`
+                        : "border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                    }`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${selectedSource === src.key ? src.dot : "bg-zinc-600"}`} />
+                    {src.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className={`space-y-4 rounded-2xl border border-white/5 bg-black/40 p-4 sm:p-5 transition-opacity ${!selectedSource ? "opacity-40 pointer-events-none" : ""}`}>
+              {!selectedSource && (
+                <div className="text-center py-2 text-sm text-zinc-400">Select a search source above to configure filters</div>
+              )}
               <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)]">
                 <div className="space-y-3">
                   <label htmlFor="jobTitle" className="flex items-center justify-between text-xs font-medium text-zinc-200">
@@ -492,6 +533,7 @@ export default function AdminSearchPage() {
                     required
                   />
                 </div>
+                {selectedSource !== "indeed" && (
                 <div className="space-y-3">
                   <label htmlFor="industry" className="flex items-center justify-between text-xs font-medium text-zinc-200">
                     <span>Industry</span>
@@ -502,35 +544,64 @@ export default function AdminSearchPage() {
                     className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3.5 py-2.5 text-sm text-zinc-50 outline-none ring-0 transition focus:border-purple-400/70 focus:ring-2 focus:ring-purple-500/50"
                   />
                 </div>
+                )}
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="space-y-2.5">
-                  <label htmlFor="salaryMin" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Min salary (USD)</label>
-                  <input type="text" id="salaryMin" name="salaryMin" value={formData.salaryMin} onChange={handleInputChange}
-                    placeholder="80,000"
-                    className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-violet-400/70 focus:ring-2 focus:ring-violet-500/50"
-                  />
-                </div>
-                <div className="space-y-2.5">
-                  <label htmlFor="salaryMax" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Max salary (USD)</label>
-                  <input type="text" id="salaryMax" name="salaryMax" value={formData.salaryMax} onChange={handleInputChange}
-                    placeholder="220,000"
-                    className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-violet-400/70 focus:ring-2 focus:ring-violet-500/50"
-                  />
-                </div>
-                <div className="space-y-2.5">
-                  <label htmlFor="jobType" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Work style / type</label>
-                  <select id="jobType" name="jobType" value={formData.jobType} onChange={handleInputChange}
-                    className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-purple-400/70 focus:ring-2 focus:ring-purple-500/50">
-                    <option value="">Any</option>
-                    <option value="Remote">Remote</option>
-                    <option value="On-site">On-site</option>
-                    <option value="Hybrid">Hybrid</option>
-                    <option value="Full-time">Full-time</option>
-                    <option value="Part-time">Part-time</option>
-                  </select>
-                </div>
+                {/* Salary — JSearch only */}
+                {selectedSource === "jsearch" && (
+                  <>
+                    <div className="space-y-2.5">
+                      <label htmlFor="salaryMin" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Min salary (USD)</label>
+                      <input type="text" id="salaryMin" name="salaryMin" value={formData.salaryMin} onChange={handleInputChange}
+                        placeholder="80,000"
+                        className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-violet-400/70 focus:ring-2 focus:ring-violet-500/50"
+                      />
+                    </div>
+                    <div className="space-y-2.5">
+                      <label htmlFor="salaryMax" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Max salary (USD)</label>
+                      <input type="text" id="salaryMax" name="salaryMax" value={formData.salaryMax} onChange={handleInputChange}
+                        placeholder="220,000"
+                        className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-violet-400/70 focus:ring-2 focus:ring-violet-500/50"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Work Style — JSearch: full options, LinkedIn: Remote only, Indeed: hidden */}
+                {selectedSource !== "indeed" && (
+                  <div className="space-y-2.5">
+                    <label htmlFor="jobType" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Work style</label>
+                    <select id="jobType" name="jobType" value={formData.jobType} onChange={handleInputChange}
+                      className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-purple-400/70 focus:ring-2 focus:ring-purple-500/50">
+                      <option value="">Any</option>
+                      <option value="Remote">Remote</option>
+                      {selectedSource === "jsearch" && (
+                        <>
+                          <option value="On-site">On-site</option>
+                          <option value="Hybrid">Hybrid</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+                )}
+
+                {/* Employment Type — JSearch & LinkedIn only */}
+                {(selectedSource === "jsearch" || selectedSource === "linkedin") && (
+                  <div className="space-y-2.5">
+                    <label htmlFor="employmentType" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Employment type</label>
+                    <select id="employmentType" name="employmentType" value={formData.employmentType} onChange={handleInputChange}
+                      className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-purple-400/70 focus:ring-2 focus:ring-purple-500/50">
+                      <option value="">Any</option>
+                      <option value="Fulltime">Full-time</option>
+                      <option value="Parttime">Part-time</option>
+                      <option value="Contractor">Contractor</option>
+                      <option value="Intern">Intern</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Freshness — all sources */}
                 <div className="space-y-2.5">
                   <label htmlFor="datePosted" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Freshness</label>
                   <select id="datePosted" name="datePosted" value={formData.datePosted} onChange={handleInputChange}
@@ -605,6 +676,7 @@ export default function AdminSearchPage() {
                 </div>
               </div>
 
+              {/* Single Search / Stop button */}
               <div className="mt-4 pt-4 border-t border-white/5 flex flex-col xl:flex-row xl:items-center gap-4 justify-between">
                 <div className="flex items-center">
                   <span className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-bold text-violet-300">
@@ -613,52 +685,35 @@ export default function AdminSearchPage() {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 w-full xl:w-auto">
-                  <div className="group relative w-full">
-                    <button
-                      onClick={() => { loading && activeService === "linkedin" ? handleStopSearch() : handleSearch("linkedin"); }}
-                      disabled={disabledSearch && !(loading && activeService === "linkedin")}
-                      className={`w-full inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${loading && activeService === "linkedin"
-                          ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
-                          : "border-indigo-400/60 bg-slate-900/70 shadow-[0_10px_30px_rgba(30,64,175,0.75)] hover:border-violet-400/70 hover:bg-slate-900/80"
-                        }`}>
-                      {loading && activeService === "linkedin" ? (
-                        <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-red-400" /><span>Stop</span></span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-indigo-400" /><span>Search via LinkedIn</span></span>
-                      )}
-                    </button>
-                  </div>
-                  <div className="group relative w-full">
-                    <button
-                      onClick={() => { loading && activeService === "jsearch" ? handleStopSearch() : handleSearch("jsearch"); }}
-                      disabled={disabledSearch && !(loading && activeService === "jsearch")}
-                      className={`w-full inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${loading && activeService === "jsearch"
-                          ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
-                          : "border-sky-400/60 bg-slate-900/60 shadow-[0_10px_35px_rgba(56,189,248,0.85)] hover:border-sky-400/80 hover:bg-slate-900/70"
-                        }`}>
-                      {loading && activeService === "jsearch" ? (
-                        <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-red-400" /><span>Stop</span></span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-sky-400 shadow-[0_0_14px_rgba(56,189,248,1)]" /><span>Search via JSearch</span></span>
-                      )}
-                    </button>
-                  </div>
-                  <div className="group relative w-full">
-                    <button
-                      onClick={() => { loading && activeService === "indeed" ? handleStopSearch() : handleSearch("indeed"); }}
-                      disabled={disabledSearch && !(loading && activeService === "indeed")}
-                      className={`w-full inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${loading && activeService === "indeed"
-                          ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
-                          : "border-emerald-400/60 bg-slate-900/60 shadow-[0_10px_30px_rgba(6,95,70,0.85)] hover:border-emerald-400/80 hover:bg-slate-900/70"
-                        }`}>
-                      {loading && activeService === "indeed" ? (
-                        <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-red-400" /><span>Stop</span></span>
-                      ) : (
-                        <span className="inline-flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /><span>Search via Indeed</span></span>
-                      )}
-                    </button>
-                  </div>
+                <div className="w-full xl:w-auto">
+                  <button
+                    onClick={() => { loading && activeService === selectedSource ? handleStopSearch() : selectedSource && handleSearch(selectedSource); }}
+                    disabled={(disabledSearch || !selectedSource) && !(loading && activeService)}
+                    className={`w-full xl:w-auto inline-flex items-center justify-center gap-2 rounded-lg border px-8 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      loading && activeService
+                        ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
+                        : selectedSource === "jsearch"
+                        ? "border-sky-400/60 bg-slate-900/60 shadow-[0_10px_35px_rgba(56,189,248,0.85)] hover:border-sky-400/80 hover:bg-slate-900/70"
+                        : selectedSource === "linkedin"
+                        ? "border-indigo-400/60 bg-slate-900/70 shadow-[0_10px_30px_rgba(30,64,175,0.75)] hover:border-violet-400/70 hover:bg-slate-900/80"
+                        : selectedSource === "indeed"
+                        ? "border-emerald-400/60 bg-slate-900/60 shadow-[0_10px_30px_rgba(6,95,70,0.85)] hover:border-emerald-400/80 hover:bg-slate-900/70"
+                        : "border-zinc-600 bg-zinc-800/60"
+                    }`}>
+                    {loading && activeService ? (
+                      <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-red-400" /><span>Stop</span></span>
+                    ) : (
+                      <span className="inline-flex items-center gap-2">
+                        <span className={`h-1.5 w-1.5 rounded-full ${
+                          selectedSource === "jsearch" ? "bg-sky-400 shadow-[0_0_14px_rgba(56,189,248,1)]"
+                          : selectedSource === "linkedin" ? "bg-indigo-400"
+                          : selectedSource === "indeed" ? "bg-emerald-400"
+                          : "bg-zinc-500"
+                        }`} />
+                        <span>{selectedSource ? `Search via ${selectedSource === "jsearch" ? "JSearch" : selectedSource === "linkedin" ? "LinkedIn" : "Indeed"}` : "Select a source"}</span>
+                      </span>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>

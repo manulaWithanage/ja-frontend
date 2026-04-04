@@ -14,12 +14,22 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/hr/:path*",
-        destination: "/job-search/:path*",
+        destination: "/hr-portal/:path*",
         permanent: true,
       },
       {
         source: "/hr",
-        destination: "/job-search",
+        destination: "/hr-portal",
+        permanent: true,
+      },
+      {
+        source: "/job-search/:path*",
+        destination: "/hr-portal/:path*",
+        permanent: true,
+      },
+      {
+        source: "/job-search",
+        destination: "/hr-portal",
         permanent: true,
       },
     ];

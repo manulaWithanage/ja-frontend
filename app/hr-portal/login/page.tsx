@@ -24,7 +24,7 @@ export default function LoginPage() {
     const token = localStorage.getItem("access_token");
     if (token) {
       // User is already authenticated, redirect to HR search page
-      router.push("/job-search/search");
+      router.push("/hr-portal/search");
     }
   }, [router]);
 
@@ -65,7 +65,7 @@ export default function LoginPage() {
 
       // Redirect to home page after successful login
       setTimeout(() => {
-        window.location.href = "/job-search";
+        window.location.href = "/hr-portal";
       }, 1500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "An error occurred during login";
@@ -87,7 +87,7 @@ export default function LoginPage() {
           <span className="pill-badge inline-flex items-center gap-2 px-4 py-1.5">
             <span className="h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_18px_rgba(167,139,250,1)]" />
             <span className="font-medium text-[11px] uppercase tracking-[0.18em] text-zinc-200">
-              JA Team
+              HR Portal
             </span>
           </span>
 
@@ -96,7 +96,7 @@ export default function LoginPage() {
               Welcome Back
             </h1>
             <p className="mt-2 text-sm text-zinc-400">
-              Sign in to access the JA Team dashboard
+              Sign in to access the HR Portal dashboard
             </p>
           </div>
         </div>
@@ -251,7 +251,7 @@ export default function LoginPage() {
         {/* Footer */}
         <div className="mt-8 flex items-center justify-center">
           <p className="text-[11px] text-zinc-500">
-            JA Team Access Only
+            HR Portal Access Only
           </p>
         </div>
       </div>
@@ -271,7 +271,7 @@ export default function LoginPage() {
             d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
           />
         </svg>
-        <span>Secured connection • TheJobHelpers JA Team</span>
+        <span>Secured connection • TheJobHelpers HR Portal</span>
       </div>
     </div>
   );

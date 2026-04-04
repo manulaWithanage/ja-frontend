@@ -7,12 +7,7 @@ export default function HrHome() {
   const router = useRouter();
 
   useLayoutEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (token) {
-      router.push("/job-search/search");
-    } else {
-      router.push("/job-search/login");
-    }
+    router.push("/hr-portal/search");
   }, [router]);
 
   return (
