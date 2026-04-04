@@ -506,7 +506,11 @@ export default function AdminSearchPage() {
                     }}
                     className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
                       selectedSource === src.key
-                        ? `border-${src.color}-400/60 bg-${src.color}-500/20 text-${src.color}-200 ring-2 ring-${src.color}-500/30`
+                        ? src.key === "jsearch"
+                          ? "border-sky-400/60 bg-sky-500/20 text-sky-200 ring-2 ring-sky-500/30"
+                          : src.key === "linkedin"
+                          ? "border-indigo-400/60 bg-indigo-500/20 text-indigo-200 ring-2 ring-indigo-500/30"
+                          : "border-emerald-400/60 bg-emerald-500/20 text-emerald-200 ring-2 ring-emerald-500/30"
                         : "border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
                     }`}
                   >
