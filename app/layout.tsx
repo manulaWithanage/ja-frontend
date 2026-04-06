@@ -21,7 +21,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "HR Portal | TheJobHelpers",
+  title: "Job Application Tool | The Job Helpers",
   description: "Find your dream job with TheJobHelpers — powered by LinkedIn, Indeed, and Google job search.",
 };
 

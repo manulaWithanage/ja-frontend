@@ -628,41 +628,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="mb-6 grid gap-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-xs text-zinc-300 sm:grid-cols-3 sm:gap-3 sm:p-5">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/20 text-sky-300 aspect-square">
-                <span className="text-[13px] leading-none">1</span>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
-                  Target
-                </p>
-                <p className="text-[13px]">Choose role & filters</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300 aspect-square">
-                <span className="text-[13px] leading-none">2</span>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
-                  Scan
-                </p>
-                <p className="text-[13px]">Hit LinkedIn / JSearch / Indeed</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-300 aspect-square">
-                <span className="text-[13px] leading-none">3</span>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
-                  Export
-                </p>
-                <p className="text-[13px]">Save your curated list</p>
-              </div>
-            </div>
-          </div>
+
             {/* Source Selector */}
             <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
               <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Step 1 — Select search source</p>
@@ -695,6 +661,9 @@ export default function Home() {
             </div>
 
             <div className={`space-y-4 rounded-2xl border border-white/5 bg-black/40 p-4 sm:p-5 transition-opacity ${!selectedSource ? "opacity-40 pointer-events-none" : ""}`}>
+              <div className="mb-2 border-b border-white/5 pb-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Step 2 — Configure filters & search</p>
+              </div>
               {!selectedSource && (
                 <div className="text-center py-2 text-sm text-zinc-400">Select a search source above to configure filters</div>
               )}
