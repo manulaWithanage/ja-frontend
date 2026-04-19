@@ -3,14 +3,16 @@ import { NextRequest, NextResponse } from "next/server";
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY || "";
 
+// 30s timeout — JSearch normally responds in 5–8s; this covers slow retries.
+const BACKEND_TIMEOUT_MS = 30_000;
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const url = new URL(request.url);
-    const useStream =
-      url.searchParams.get("stream") === "true" ||
-      url.pathname.includes("/stream");
+    const useStream = url.searchParams.get("stream") === "true";
     const bypassCache = url.searchParams.get("bypass_cache") === "true";
+    const looseSearch = url.searchParams.get("loose_search") === "true";
 
     // Forward the request to the backend
     const headers: HeadersInit = {
@@ -22,16 +24,27 @@ export async function POST(request: NextRequest) {
       headers["X-API-Key"] = API_KEY;
     }
 
-    // Use streaming endpoint if requested; append bypass_cache when set
+    // Forward the admin JWT so the backend can identify the caller
+    const authHeader = request.headers.get("authorization");
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
+    // Build backend URL — append bypass_cache when set
     const baseEndpoint = useStream
       ? `${BACKEND_URL}/api/jobs/jsearch/stream`
       : `${BACKEND_URL}/api/jobs/jsearch`;
-    const endpoint = bypassCache ? `${baseEndpoint}?bypass_cache=true` : baseEndpoint;
+    const backendParams = new URLSearchParams();
+    if (bypassCache) backendParams.set("bypass_cache", "true");
+    if (looseSearch)  backendParams.set("loose_search", "true");
+    const qs = backendParams.toString();
+    const endpoint = qs ? `${baseEndpoint}?${qs}` : baseEndpoint;
 
     const response = await fetch(endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -49,7 +62,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If streaming, return the stream as-is
+    // If streaming, pipe the SSE stream as-is
     if (useStream && response.body) {
       return new NextResponse(response.body, {
         headers: {
@@ -63,10 +76,14 @@ export async function POST(request: NextRequest) {
     const data = await response.json();
     return NextResponse.json(data);
   } catch (error: unknown) {
+    const isTimeout = error instanceof Error && error.name === "TimeoutError";
     console.error("JSearch API error:", error);
     return NextResponse.json(
-      { error: "Failed to search jobs", details: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      {
+        error: isTimeout ? "Search timed out — please try again" : "Failed to search jobs",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: isTimeout ? 504 : 500 }
     );
   }
 }

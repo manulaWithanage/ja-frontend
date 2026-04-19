@@ -269,7 +269,11 @@ export default function AdminSearchPage() {
     setFormData((prev: FormData) => ({ ...prev, [name]: value }));
   };
 
-  const handleSearch = async (service: "jsearch" | "indeed" | "linkedin", bypassCache = false) => {
+  const handleSearch = async (
+    service: "jsearch" | "indeed" | "linkedin",
+    bypassCache = false,
+    looseSearch = false
+  ) => {
     // No quota enforcement for admin
     setLoading(true);
     setError(null);
@@ -295,8 +299,11 @@ export default function AdminSearchPage() {
       const abortController = new AbortController();
       setStreamController(abortController);
 
-      // Append bypass_cache=true when fresh search is requested
-      const endpoint = `/api/${service}?stream=true${bypassCache ? "&bypass_cache=true" : ""}`;
+      // Build query string — append flags as needed
+      const params = new URLSearchParams({ stream: "true" });
+      if (bypassCache)  params.set("bypass_cache", "true");
+      if (looseSearch)  params.set("loose_search", "true");
+      const endpoint = `/api/${service}?${params.toString()}`;
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -474,9 +481,9 @@ export default function AdminSearchPage() {
                     onClick={() => {
                       setSelectedSource(src.key);
                       // Reset filters that the new source doesn't support
+                      // (all sources now support Industry)
                       setFormData(prev => ({
                         ...prev,
-                        ...(src.key === "linkedin" ? { industry: "" } : {}),
                       }));
                     }}
                     className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
@@ -515,7 +522,6 @@ export default function AdminSearchPage() {
                     required
                   />
                 </div>
-                {selectedSource !== "linkedin" && (
                 <div className="space-y-3">
                   <label htmlFor="industry" className="flex items-center justify-between text-xs font-medium text-zinc-200">
                     <span>Industry</span>
@@ -526,7 +532,6 @@ export default function AdminSearchPage() {
                     className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3.5 py-2.5 text-sm text-zinc-50 outline-none ring-0 transition focus:border-purple-400/70 focus:ring-2 focus:ring-purple-500/50"
                   />
                 </div>
-                )}
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -743,6 +748,21 @@ export default function AdminSearchPage() {
                             <div>
                               <p className="text-xs font-semibold text-amber-200">Fresh Search <span className="ml-1 rounded px-1 py-0.5 text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20">No Cache</span></p>
                               <p className="text-[10px] text-zinc-400 mt-0.5">Bypass cache — always hits the live API</p>
+                            </div>
+                          </button>
+
+                          {/* Loose Search — no scoring, raw API results */}
+                          <button
+                            onClick={() => selectedSource && handleSearch(selectedSource, true, true)}
+                            className="w-full flex items-start gap-3 px-3 py-2.5 text-left hover:bg-white/5 transition border-t border-zinc-800">
+                            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-orange-500/10 border border-orange-500/20">
+                              <svg className="h-3 w-3 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                            </span>
+                            <div>
+                              <p className="text-xs font-semibold text-orange-200">Loose Search <span className="ml-1 rounded px-1 py-0.5 text-[9px] bg-orange-500/10 text-orange-400 border border-orange-500/20">Raw API</span></p>
+                              <p className="text-[10px] text-zinc-400 mt-0.5">Skips all relevance filtering — returns raw API results</p>
                             </div>
                           </button>
 
