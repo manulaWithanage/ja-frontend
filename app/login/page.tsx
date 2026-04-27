@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useLayoutEffect } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { isClientAuthenticated, setClientToken } from "../lib/clientAuth";
 
@@ -104,13 +105,14 @@ export default function ClientLoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen">
-      {/* ── Left: Feature Panel ─────────────────────────── */}
-      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden">
-        {/* Gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-teal-950 to-cyan-950" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.15),transparent_50%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(6,182,212,0.12),transparent_50%)]" />
+    <div className="dark min-h-screen bg-zinc-950 text-zinc-50">
+      <div className="flex min-h-screen">
+        {/* ── Left: Feature Panel ─────────────────────────── */}
+        <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden">
+          {/* Gradient background */}
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-950 via-teal-950 to-cyan-950" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.15),transparent_50%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(6,182,212,0.12),transparent_50%)]" />
 
         {/* Grid pattern overlay */}
         <div
@@ -127,7 +129,7 @@ export default function ClientLoginPage() {
           {/* Top: Logo */}
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.4)]">
-              <img src="/logo.svg" alt="Logo" className="h-full w-full object-cover" />
+              <Image src="/logo.svg" alt="Logo" width={40} height={40} className="h-full w-full object-cover" />
             </div>
             <div>
               <p className="text-sm font-bold text-white tracking-wide">Job Application Hub</p>
@@ -197,7 +199,7 @@ export default function ClientLoginPage() {
           {/* Mobile-only branding */}
           <div className="mb-8 text-center lg:hidden">
             <div className="mx-auto mb-3 flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl shadow-[0_0_25px_rgba(16,185,129,0.4)]">
-              <img src="/logo.svg" alt="Logo" className="h-full w-full object-cover" />
+              <Image src="/logo.svg" alt="Logo" width={40} height={40} className="h-full w-full object-cover" />
             </div>
             <h1 className="text-xl font-bold text-zinc-100">Job Application Hub</h1>
             <p className="text-xs text-emerald-400/70 uppercase tracking-widest mt-1">Client Portal</p>
@@ -328,5 +330,6 @@ export default function ClientLoginPage() {
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }

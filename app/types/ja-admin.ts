@@ -80,6 +80,7 @@ export interface Job {
   bundle_id?: string | null;
   is_archived: boolean;
   description: string | null;
+  handled_by: "ja_team" | "client" | null; // Who last acted on this job
   created_at: string;
   updated_at: string;
 }
@@ -90,4 +91,12 @@ export interface DashboardStats {
   activeClients: number;
   totalJobsThisWeek: number;
   pendingBatch: number;
+}
+
+export interface ActivityEvent {
+  client: string;
+  action: string;
+  detail: string;
+  time: string;
+  color: 'violet' | 'emerald' | 'sky';
 }

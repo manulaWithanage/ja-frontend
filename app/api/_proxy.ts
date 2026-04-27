@@ -3,7 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
+const BACKEND_URL = (process.env.BACKEND_URL || "http://localhost:8000").replace(/\/$/, "");
 
 export async function proxyRequest(
   req: NextRequest,
@@ -33,8 +33,12 @@ export async function proxyRequest(
     }
   }
 
+  // Forward search parameters
+  const search = req.nextUrl.search;
+  const fullPath = `${backendPath}${search}`;
+
   try {
-    const res = await fetch(`${BACKEND_URL}${backendPath}`, {
+    const res = await fetch(`${BACKEND_URL}${fullPath}`, {
       method,
       headers,
       body,

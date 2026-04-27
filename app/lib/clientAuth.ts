@@ -63,7 +63,7 @@ export function isClientAuthenticated(): boolean {
         return false;
       }
     }
-  } catch (e) {
+  } catch {
     // Ignore decode errors, token might be opaque
   }
 

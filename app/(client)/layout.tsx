@@ -6,10 +6,7 @@ import ClientSidebar from "../components/ClientSidebar";
 import MobileHeader from "../components/MobileHeader";
 import { clearClientToken } from "../lib/clientAuth";
 
-function subscribe(callback: () => void) {
-  window.addEventListener("storage", callback);
-  return () => window.removeEventListener("storage", callback);
-}
+
 
 function getClientAuthStatus(): boolean {
   if (typeof window === "undefined") return true; // Assume true on server to prevent flash
@@ -55,18 +52,18 @@ export default function ClientLayout({
 
   if (!isMounted || !isAuthed) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-500 border-t-zinc-200" />
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-300 dark:border-zinc-500 border-t-slate-900 dark:border-t-zinc-200" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-zinc-950">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground">
       <ClientSidebar isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
       <main className="flex-1 overflow-y-auto w-full">
         <MobileHeader onMenuClick={() => setMobileMenuOpen(true)} title="Client Portal" />
-        <div className="px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
+        <div className="px-4 py-6 sm:px-8 lg:pl-12 lg:pr-16 lg:py-10">
           {children}
         </div>
       </main>

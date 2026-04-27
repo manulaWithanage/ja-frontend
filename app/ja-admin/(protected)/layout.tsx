@@ -13,6 +13,7 @@ export default function JaAdminProtectedLayout({ children }: { children: React.R
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMounted(true);
     // Use cookie/localStorage check that correctly determines auth on mount
     setIsAuthed(!!getJaToken());

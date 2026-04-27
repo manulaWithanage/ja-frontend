@@ -98,7 +98,7 @@ export default function BundleSearchPage() {
           console.warn("Could not fetch client name for bundle:", err);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Bundle search failed:", err);
       setError("No bundle found for this ID. Ensure it has been saved from the Client Pipeline.");
     } finally {
@@ -249,7 +249,7 @@ export default function BundleSearchPage() {
           <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4 px-2">
             <div>
               <h2 className="text-lg font-bold text-zinc-200">
-                Bundle Results for <span className="text-violet-400">"{searchInput}"</span>
+                Bundle Results for <span className="text-violet-400">&quot;{searchInput}&quot;</span>
               </h2>
               {clientName && (
                 <p className="text-xs font-medium text-zinc-500 mt-1">
@@ -293,7 +293,7 @@ export default function BundleSearchPage() {
                 <svg className="h-6 w-6 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
               </div>
               <p className="text-zinc-300 font-bold mb-1">No Jobs Found</p>
-              <p className="text-zinc-500 text-xs max-w-sm mx-auto">This bundle ID hasn't been assigned to any operations workflows yet.</p>
+              <p className="text-zinc-500 text-xs max-w-sm mx-auto">This bundle ID hasn&apos;t been assigned to any operations workflows yet.</p>
             </div>
           )}
 

@@ -143,7 +143,8 @@ async function testDirect() {
     printJobs(data?.jobs);
 
     // Print metadata apart from jobs array
-    const { jobs: _j, ...meta } = data || {};
+    const meta = { ...data };
+    delete meta.jobs;
     if (Object.keys(meta).length) {
       process.stdout.write("\n  Response metadata: " + JSON.stringify(meta, null, 4) + "\n");
     }

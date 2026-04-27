@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useLayoutEffect, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
+import Image from "next/image";
 
 interface Job {
   id: string;
@@ -237,7 +238,6 @@ const COUNTRIES: Country[] = [
 ];
 
 export default function Home() {
-  const router = useRouter();
 
 
 
@@ -274,9 +274,23 @@ export default function Home() {
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
   const countryDropdownRef = useRef<HTMLDivElement>(null);
+  const countryTriggerRef = useRef<HTMLButtonElement>(null);
+  const [dropdownCoords, setDropdownCoords] = useState({ top: 0, left: 0, width: 0 });
 
   // Get selected country info
   const selectedCountry = COUNTRIES.find((c) => c.code === formData.country);
+
+  // Position the portal dropdown
+  useLayoutEffect(() => {
+    if (countryDropdownOpen && countryTriggerRef.current) {
+      const rect = countryTriggerRef.current.getBoundingClientRect();
+      setDropdownCoords({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width
+      });
+    }
+  }, [countryDropdownOpen]);
 
   // Filter countries based on search
   const filteredCountries = COUNTRIES.filter(
@@ -600,7 +614,6 @@ export default function Home() {
     <div className="mx-auto flex min-h-[calc(100vh-104px)] max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
       <section className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:items-stretch">
         <div className="glass-panel relative p-6 sm:p-8">
-          <div className="pointer-events-none absolute inset-0 -z-10 rounded-[1.25rem] border border-white/10" />
 
           <div className="mb-6 flex items-center gap-3 text-xs text-zinc-400">
             <span className="pill-badge inline-flex items-center gap-1.5 px-3 py-1">
@@ -630,7 +643,7 @@ export default function Home() {
 
 
             {/* Source Selector */}
-            <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
+            <div className="mb-8 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
               <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Step 1 — Select search source</p>
               <div className="grid grid-cols-3 gap-2">
                 {([
@@ -747,17 +760,27 @@ export default function Home() {
                     className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50"
                   />
                 </div>
-                <div className="space-y-2.5 relative" ref={countryDropdownRef}>
+                <div className="space-y-2.5 relative">
                   <label htmlFor="country" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Country / region</label>
-                  <button type="button" id="country" onClick={() => setCountryDropdownOpen(!countryDropdownOpen)}
+                  <button type="button" id="country" ref={countryTriggerRef} onClick={() => setCountryDropdownOpen(!countryDropdownOpen)}
                     className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-left text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50 flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2 truncate">
-                      {selectedCountry ? (<><img src={`https://flagcdn.com/w20/${selectedCountry.code.toLowerCase()}.png`} alt={selectedCountry.name} className="h-4 w-5 object-cover rounded-sm" /><span>{selectedCountry.name}</span></>) : (<span className="text-zinc-400">Select country...</span>)}
+                      {selectedCountry ? (<><Image src={`https://flagcdn.com/w20/${selectedCountry.code.toLowerCase()}.png`} alt={selectedCountry.name} width={20} height={16} className="h-4 w-5 object-cover rounded-sm" /><span>{selectedCountry.name}</span></>) : (<span className="text-zinc-400">Select country...</span>)}
                     </span>
                     <svg className={`h-4 w-4 text-zinc-400 transition-transform ${countryDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                   </button>
-                  {countryDropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full max-h-60 overflow-hidden rounded-lg border border-white/20 bg-zinc-800/95 shadow-xl backdrop-blur-sm">
+                  {countryDropdownOpen && createPortal(
+                    <div 
+                      ref={countryDropdownRef}
+                      style={{ 
+                        position: 'absolute', 
+                        top: `${dropdownCoords.top}px`, 
+                        left: `${dropdownCoords.left}px`, 
+                        width: `${dropdownCoords.width}px`,
+                        zIndex: 9999 
+                      }}
+                      className="mt-1 max-h-60 overflow-hidden rounded-lg border border-white/20 bg-zinc-800/95 shadow-xl backdrop-blur-sm"
+                    >
                       <div className="sticky top-0 p-2 border-b border-white/10 bg-zinc-800/95">
                         <input type="text" placeholder="Search countries..." value={countrySearch} onChange={(e) => setCountrySearch(e.target.value)}
                           className="w-full rounded-md border border-white/20 bg-zinc-700/90 px-3 py-1.5 text-sm text-zinc-50 outline-none placeholder:text-zinc-400 focus:border-sky-400/70" autoFocus />
@@ -771,14 +794,15 @@ export default function Home() {
                           <button type="button" key={country.code}
                             onClick={() => { setFormData((prev) => ({ ...prev, country: country.code })); setCountryDropdownOpen(false); setCountrySearch(""); }}
                             className={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2 transition ${formData.country === country.code ? "bg-sky-500/20 text-sky-200" : "text-zinc-50"}`}>
-                            <img src={`https://flagcdn.com/w20/${country.code.toLowerCase()}.png`} alt={country.name} className="h-4 w-5 object-cover rounded-sm" />
+                            <Image src={`https://flagcdn.com/w20/${country.code.toLowerCase()}.png`} alt={country.name} width={20} height={16} className="h-4 w-5 object-cover rounded-sm" />
                             <span>{country.name}</span>
                             <span className="ml-auto text-[10px] text-zinc-500">{country.code}</span>
                           </button>
                         ))}
                         {filteredCountries.length === 0 && (<div className="px-3 py-4 text-center text-sm text-zinc-400">No countries found</div>)}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </div>
                 <div className="flex items-end justify-end gap-2">
@@ -792,7 +816,13 @@ export default function Home() {
                   <span>Searches run directly against <span className="font-medium text-zinc-200">the server</span>.</span>
                 </div>
                 <button
-                  onClick={() => { loading && activeService === selectedSource ? handleStopSearch() : selectedSource && handleSearch(selectedSource); }}
+                  onClick={() => {
+                    if (loading && activeService === selectedSource) {
+                      handleStopSearch();
+                    } else if (selectedSource) {
+                      handleSearch(selectedSource);
+                    }
+                  }}
                   disabled={(disabledSearch || !selectedSource) && !(loading && activeService)}
                   className={`inline-flex items-center justify-center gap-2 rounded-lg border px-8 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${
                     loading && activeService
@@ -819,7 +849,6 @@ export default function Home() {
         </div>
 
         <aside className="subtle-card relative flex flex-col justify-between p-5 sm:p-6 lg:p-7">
-          <div className="absolute inset-0 -z-10 rounded-[0.9rem] border border-white/5" />
 
           <div className="space-y-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">

@@ -75,7 +75,7 @@ export function isJaAuthenticated(): boolean {
         return false;
       }
     }
-  } catch (e) {
+  } catch {
     // Ignore decode errors, token might be opaque
   }
 

@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useLayoutEffect, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
+import Image from "next/image";
 import { Toast } from "../../components/Toast";
 
 
@@ -242,7 +244,6 @@ export default function ClientSearchPage() {
   
   // Client layout handles auth
 
-  const [activeTab, setActiveTab] = useState<'search' | 'history'>('search');
 
   const [formData, setFormData] = useState<FormData>({
     jobTitle: "",
@@ -273,16 +274,17 @@ export default function ClientSearchPage() {
   const [indeedRunId, setIndeedRunId] = useState<string | null>(null);
   const [streamController, setStreamController] =
     useState<AbortController | null>(null);
+  const [mobileTab, setMobileTab] = useState<"search" | "results">("search");
 
   // Assignment states — quota loaded from backend on mount
   const [assignmentsUsed, setAssignmentsUsed] = useState<number>(0);
-  const [maxAssignments, setMaxAssignments] = useState<number>(15);
+  const [maxAssignments, setMaxAssignments] = useState<number>(30);
   const [assigningJobId, setAssigningJobId] = useState<string | null>(null);
   const [assignedJobIds, setAssignedJobIds] = useState<Set<string>>(new Set());
 
-  // Search attempts used — 3 attempts per week, pick up to 15 jobs
+  // Search attempts used — 30 attempts per week, pick up to 30 jobs
   const [searchAttemptsUsed, setSearchAttemptsUsed] = useState<number>(0);
-  const [maxSearchAttempts, setMaxSearchAttempts] = useState<number>(3);
+  const [maxSearchAttempts, setMaxSearchAttempts] = useState<number>(10);
   const [isStatsLoading, setIsStatsLoading] = useState<boolean>(true);
 
   // Toast notifications
@@ -327,9 +329,9 @@ export default function ClientSearchPage() {
         if (statsRes.ok) {
           const stats = await statsRes.json();
           setAssignmentsUsed(stats.assignments_used ?? 0);
-          setMaxAssignments(stats.max_assignments ?? 15);
+          setMaxAssignments(stats.max_assignments ?? 30);
           setSearchAttemptsUsed(stats.search_attempts_used ?? 0);
-          setMaxSearchAttempts(stats.max_search_attempts ?? 3);
+          setMaxSearchAttempts(stats.max_search_attempts ?? 10);
         }
 
         // Pre-load existing assigned jobs to populate the "Assigned ✓" state
@@ -346,7 +348,8 @@ export default function ClientSearchPage() {
             : [];
           // Build a set of "title|company" keys for already-assigned jobs
           const alreadyAssigned = new Set<string>();
-          existingJobs.forEach((j: any) => {
+          interface JobRecord { job_title?: string; company?: string }
+          existingJobs.forEach((j: JobRecord) => {
             const key = `${(j.job_title || "").toLowerCase()}|${(j.company || "").toLowerCase()}`;
             alreadyAssigned.add(key);
           });
@@ -360,7 +363,8 @@ export default function ClientSearchPage() {
           const backendHistory = Array.isArray(histData) ? histData : histData?.data ?? [];
           if (backendHistory.length > 0) {
             // Normalize backend history to UI schema
-            const normalizedBackend = backendHistory.map((h: any) => ({
+            interface HistoryItem { id?: string; query_params?: FormData; formData?: FormData; results_preview?: Job[]; jobs?: Job[]; service?: string; timestamp?: number; created_at?: number }
+            const normalizedBackend = backendHistory.map((h: HistoryItem) => ({
               id: h.id || Math.random().toString(),
               formData: h.query_params || h.formData || {},
               jobs: h.results_preview || h.jobs || [],
@@ -435,10 +439,11 @@ export default function ClientSearchPage() {
     })();
   };
 
-  const restoreFromHistory = (item: any) => {
+  interface HistoryEntry { formData: FormData; jobs: Job[]; service: string }
+  const restoreFromHistory = (item: HistoryEntry) => {
     setFormData(item.formData);
     setJobs(item.jobs);
-    setActiveService(item.service as any);
+    setActiveService(item.service as "jsearch" | "indeed" | "linkedin");
     setSearchProgress(null);
     setLoading(false);
     setHasSearched(true);
@@ -478,6 +483,7 @@ export default function ClientSearchPage() {
           match_score: 0,
           source: "client_selected",
           status: "queued",
+          handled_by: "client",
         }),
       });
 
@@ -504,6 +510,19 @@ export default function ClientSearchPage() {
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
   const countryDropdownRef = useRef<HTMLDivElement>(null);
+  const countryTriggerRef = useRef<HTMLButtonElement>(null);
+  const [dropdownCoords, setDropdownCoords] = useState({ top: 0, left: 0, width: 0 });
+  // Position the portal dropdown
+  useLayoutEffect(() => {
+    if (countryDropdownOpen && countryTriggerRef.current) {
+      const rect = countryTriggerRef.current.getBoundingClientRect();
+      setDropdownCoords({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width
+      });
+    }
+  }, [countryDropdownOpen]);
 
   // Get selected country info
   const selectedCountry = COUNTRIES.find((c) => c.code === formData.country);
@@ -726,14 +745,14 @@ export default function ClientSearchPage() {
                   if (data.type === "start") {
                     setSearchProgress({
                       count: 0,
-                      maxResults: service === "jsearch" ? 15 : 20,
+                      maxResults: 30,
                       status: "starting",
                     });
                   } else if (data.type === "progress") {
                     setSearchProgress({
                       count: data.count || 0,
                       maxResults:
-                        data.max_results || (service === "jsearch" ? 15 : 20),
+                        data.max_results || 30,
                       status: data.status || "running",
                     });
                     // Store run_id if provided for abort functionality (Indeed only)
@@ -845,64 +864,17 @@ export default function ClientSearchPage() {
   const disabledSearch = isStatsLoading || loading || !formData.jobTitle.trim() || searchAttemptsExhausted;
 
   return (
-    <div className="mx-auto flex lg:h-[calc(100vh-104px)] min-h-[calc(100vh-104px)] max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="flex lg:h-[calc(100vh-160px)] min-h-0 flex-col gap-4 sm:gap-6">
       
-      {/* Tab Navigation */}
-      <div className="mb-2 flex space-x-6 border-b border-zinc-800/60 pb-1">
-        <button
-          onClick={() => setActiveTab('search')}
-          className={`pb-3 text-sm font-semibold transition border-b-2 ${activeTab === 'search' ? 'border-sky-400 text-sky-400' : 'border-transparent text-zinc-400 hover:text-zinc-200'}`}
-        >
-          New Search
-        </button>
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`pb-3 text-sm font-semibold transition border-b-2 ${activeTab === 'history' ? 'border-emerald-400 text-emerald-400' : 'border-transparent text-zinc-400 hover:text-zinc-200'}`}
-        >
-          Search History
-        </button>
+      {/* Mobile Tab Navigator */}
+      <div className="lg:hidden flex items-center bg-slate-100/50 dark:bg-zinc-950/60 p-1 rounded-2xl border border-slate-200/50 dark:border-zinc-800/50 mx-4 shrink-0">
+        <button onClick={() => setMobileTab("search")} className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mobileTab === "search" ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-lg" : "text-slate-400 dark:text-zinc-600"}`}>Search</button>
+        <button onClick={() => setMobileTab("results")} className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mobileTab === "results" ? "bg-white dark:bg-zinc-900 text-slate-900 dark:text-white shadow-lg" : "text-slate-400 dark:text-zinc-600"}`}>Results ({jobs.length})</button>
       </div>
-
-      {activeTab === 'history' ? (
-        <section className="flex flex-col gap-4 lg:overflow-y-auto pr-2 lg:custom-scrollbar lg:min-h-0">
-          {searchHistory.length === 0 ? (
-            <div className="glass-panel p-8 text-center text-zinc-400 text-sm">
-              No search history available yet.
-            </div>
-          ) : (
-            searchHistory.map((item) => (
-              <div key={item.id} className="glass-panel p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 transition hover:border-emerald-500/30">
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-xl font-bold text-zinc-200">{item.formData.jobTitle || "Untitled Search"}</h3>
-                    <span className="pill-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[10px]">
-                      {item.service}
-                    </span>
-                  </div>
-                  <p className="text-sm text-zinc-400">
-                    {item.formData.city || "Remote"} • {item.jobs?.length || 0} matching roles
-                  </p>
-                  <p className="text-xs text-zinc-500 mt-3">
-                    Searched at {new Date(item.timestamp).toLocaleString()}
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    restoreFromHistory(item);
-                    setActiveTab('search');
-                  }}
-                  className="shrink-0 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-6 py-3 text-sm font-bold text-emerald-400 transition hover:bg-emerald-500/20 hover:border-emerald-500/40"
-                >
-                  Restore Results
-                </button>
-              </div>
-            ))
-          )}
-        </section>
-      ) : (
+      
+      {/* Main Content Area */}
       <section className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-stretch lg:min-h-0 flex-1">
-        <div className="glass-panel relative p-6 sm:p-8 flex flex-col lg:overflow-y-auto lg:custom-scrollbar pr-2 sm:pr-4">
-          <div className="pointer-events-none absolute inset-0 -z-10 rounded-[1.25rem] border border-white/10" />
+        <div className={`glass-panel relative flex flex-col lg:overflow-y-auto lg:custom-scrollbar pr-2 sm:pr-4 p-4 sm:p-8 ${mobileTab === 'search' ? 'flex' : 'hidden lg:flex'}`}>
 
           <div className="mb-6 flex items-center gap-3 text-xs text-zinc-400">
             <span className="pill-badge inline-flex items-center gap-1.5 px-3 py-1">
@@ -911,7 +883,7 @@ export default function ClientSearchPage() {
                 Smart Job Search
               </span>
             </span>
-            <span className="hidden sm:inline text-[11px] text-zinc-500">
+            <span className="hidden sm:inline text-[11px] text-slate-400 dark:text-zinc-500">
               CSV export
             </span>
           </div>
@@ -919,7 +891,7 @@ export default function ClientSearchPage() {
           <div className="mb-7">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-3">
-                <h1 className="text-balance text-3xl font-bold tracking-tight text-zinc-50 sm:text-4xl lg:text-5xl">
+                <h1 className="text-balance text-3xl font-bold tracking-tight text-slate-900 dark:text-zinc-50 sm:text-4xl lg:text-5xl">
                   Find roles that match your stack,
                   <span className="bg-linear-to-r from-sky-400 via-cyan-300 to-emerald-300 bg-clip-text text-transparent block">
                     not just your title.
@@ -934,7 +906,7 @@ export default function ClientSearchPage() {
 
 
           {/* Source Selector */}
-          <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
+          <div className="mb-8 rounded-2xl border border-slate-300/50 dark:border-white/10 bg-white/80 dark:bg-black/30 p-4 sm:p-5 shadow-sm">
             <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Step 1 — Select search source</p>
             <div className="grid grid-cols-3 gap-2">
               {([
@@ -952,8 +924,8 @@ export default function ClientSearchPage() {
                   }}
                   className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
                     selectedSource === src.key
-                      ? "border-sky-400/60 bg-sky-500/20 text-sky-200 ring-2 ring-sky-500/30"
-                      : "border-zinc-700/60 bg-zinc-800/40 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                      ? "border-sky-400/60 bg-sky-500/20 text-sky-600 dark:text-sky-200 ring-2 ring-sky-500/30"
+                      : "border-slate-200 dark:border-zinc-700/60 bg-white dark:bg-zinc-800/40 text-slate-500 dark:text-zinc-400 hover:border-slate-300 dark:hover:border-zinc-600 hover:text-slate-900 dark:hover:text-zinc-200"
                   }`}
                 >
                   <span className={`h-1.5 w-1.5 rounded-full ${selectedSource === src.key ? src.dot : "bg-zinc-600"}`} />
@@ -963,7 +935,7 @@ export default function ClientSearchPage() {
             </div>
           </div>
 
-          <div className={`space-y-4 rounded-2xl border border-white/5 bg-black/40 p-4 sm:p-5 transition-opacity ${!selectedSource ? "opacity-40 pointer-events-none" : ""}`}>
+          <div className={`space-y-4 rounded-2xl border border-slate-300/50 dark:border-white/5 bg-white/80 dark:bg-black/40 p-4 sm:p-5 shadow-sm transition-opacity ${!selectedSource ? "opacity-40 pointer-events-none" : ""}`}>
             <div className="mb-2 border-b border-white/5 pb-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Step 2 — Configure filters & search</p>
             </div>
@@ -972,25 +944,25 @@ export default function ClientSearchPage() {
             )}
             <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)]">
               <div className="space-y-3">
-                <label htmlFor="jobTitle" className="flex items-center justify-between text-xs font-medium text-zinc-200">
+                <label htmlFor="jobTitle" className="flex items-center justify-between text-xs font-medium text-slate-700 dark:text-zinc-200">
                   <span>Role or title *</span>
                   <span className="text-[11px] text-zinc-400">Try &ldquo;Senior Backend Engineer&rdquo;</span>
                 </label>
                 <input type="text" id="jobTitle" name="jobTitle" value={formData.jobTitle} onChange={handleInputChange}
                   placeholder="e.g., Staff Frontend Engineer"
-                  className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3.5 py-2.5 text-sm text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50"
+                  className="w-full rounded-lg border border-slate-300 dark:border-white/30 bg-white dark:bg-zinc-700/90 px-3.5 py-2.5 text-sm text-slate-900 dark:text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50 shadow-sm"
                   required
                 />
               </div>
               {selectedSource !== "linkedin" && (
               <div className="space-y-3">
-                <label htmlFor="industry" className="flex items-center justify-between text-xs font-medium text-zinc-200">
+                <label htmlFor="industry" className="flex items-center justify-between text-xs font-medium text-slate-700 dark:text-zinc-200">
                   <span>Industry</span>
                   <span className="text-[11px] text-zinc-400">Optional focus (fintech, AI, etc.)</span>
                 </label>
                 <input type="text" id="industry" name="industry" value={formData.industry} onChange={handleInputChange}
                   placeholder="e.g., Developer tools / AI infra"
-                  className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3.5 py-2.5 text-sm text-zinc-50 outline-none ring-0 transition focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-500/50"
+                  className="w-full rounded-lg border border-slate-300 dark:border-white/30 bg-white dark:bg-zinc-700/90 px-3.5 py-2.5 text-sm text-slate-900 dark:text-zinc-50 outline-none ring-0 transition focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-500/50 shadow-sm"
                 />
               </div>
               )}
@@ -1000,18 +972,18 @@ export default function ClientSearchPage() {
               <div className="space-y-2.5">
                 <label htmlFor="salaryMin" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Min salary (USD/yr)</label>
                 <input type="text" id="salaryMin" name="salaryMin" value={formData.salaryMin} onChange={handleInputChange}
-                  placeholder="80,000" className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50" />
+                  placeholder="80,000" className="w-full rounded-lg border border-slate-300 dark:border-white/30 bg-white dark:bg-zinc-700/90 px-3 py-2 text-sm text-slate-900 dark:text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50 shadow-sm" />
               </div>
               <div className="space-y-2.5">
                 <label htmlFor="salaryMax" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Max salary (USD/yr)</label>
                 <input type="text" id="salaryMax" name="salaryMax" value={formData.salaryMax} onChange={handleInputChange}
-                  placeholder="220,000" className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50" />
+                  placeholder="220,000" className="w-full rounded-lg border border-slate-300 dark:border-white/30 bg-white dark:bg-zinc-700/90 px-3 py-2 text-sm text-slate-900 dark:text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50 shadow-sm" />
               </div>
 
               <div className="space-y-2.5">
                 <label htmlFor="jobType" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Work style</label>
                 <select id="jobType" name="jobType" value={formData.jobType} onChange={handleInputChange}
-                  className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-500/50">
+                  className="w-full rounded-lg border border-slate-300 dark:border-white/30 bg-white dark:bg-zinc-700/90 px-3 py-2 text-sm text-slate-900 dark:text-zinc-50 outline-none ring-0 transition focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-500/50 shadow-sm">
                   <option value="">Any</option>
                   <option value="Remote">Remote</option>
                   <option value="On-site">On-site</option>
@@ -1022,7 +994,7 @@ export default function ClientSearchPage() {
               <div className="space-y-2.5">
                 <label htmlFor="employmentType" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Employment type</label>
                 <select id="employmentType" name="employmentType" value={formData.employmentType} onChange={handleInputChange}
-                  className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-500/50">
+                  className="w-full rounded-lg border border-slate-300 dark:border-white/30 bg-white dark:bg-zinc-700/90 px-3 py-2 text-sm text-slate-900 dark:text-zinc-50 outline-none ring-0 transition focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-500/50 shadow-sm">
                   <option value="">Any</option>
                   <option value="Fulltime">Full-time</option>
                   <option value="Parttime">Part-time</option>
@@ -1034,7 +1006,7 @@ export default function ClientSearchPage() {
               <div className="space-y-2.5">
                 <label htmlFor="datePosted" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Freshness</label>
                 <select id="datePosted" name="datePosted" value={formData.datePosted} onChange={handleInputChange}
-                  className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-500/50">
+                  className="w-full rounded-lg border border-slate-300 dark:border-white/30 bg-white dark:bg-zinc-700/90 px-3 py-2 text-sm text-slate-900 dark:text-zinc-50 outline-none ring-0 transition focus:border-emerald-400/70 focus:ring-2 focus:ring-emerald-500/50 shadow-sm">
                   <option value="">Any time</option>
                   <option value="today">Past 24 hours</option>
                   <option value="week">Past week</option>
@@ -1048,41 +1020,52 @@ export default function ClientSearchPage() {
                 <label htmlFor="city" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">City (optional)</label>
                 <input type="text" id="city" name="city" value={formData.city} onChange={handleInputChange}
                   placeholder="San Francisco, London..."
-                  className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50"
+                  className="w-full rounded-lg border border-slate-300 dark:border-white/30 bg-white dark:bg-zinc-700/90 px-3 py-2 text-sm text-slate-900 dark:text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50 shadow-sm"
                 />
               </div>
-              <div className="space-y-2.5 relative" ref={countryDropdownRef}>
+              <div className="space-y-2.5 relative">
                 <label htmlFor="country" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Country / region</label>
-                <button type="button" id="country" onClick={() => setCountryDropdownOpen(!countryDropdownOpen)}
-                  className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-left text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50 flex items-center justify-between gap-2">
+                <button type="button" id="country" ref={countryTriggerRef} onClick={() => setCountryDropdownOpen(!countryDropdownOpen)}
+                  className="w-full rounded-lg border border-slate-300 dark:border-white/30 bg-white dark:bg-zinc-700/90 px-3 py-2 text-sm text-left text-slate-900 dark:text-zinc-50 outline-none ring-0 transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-500/50 flex items-center justify-between gap-2 shadow-sm">
                   <span className="flex items-center gap-2 truncate">
-                    {selectedCountry ? (<><img src={`https://flagcdn.com/w20/${selectedCountry.code.toLowerCase()}.png`} alt={selectedCountry.name} className="h-4 w-5 object-cover rounded-sm" /><span>{selectedCountry.name}</span></>) : (<span className="text-zinc-400">Select country...</span>)}
+                      {selectedCountry ? (<><Image src={`https://flagcdn.com/w20/${selectedCountry.code.toLowerCase()}.png`} alt={selectedCountry.name} width={20} height={16} className="h-4 w-5 object-cover rounded-sm" /><span>{selectedCountry.name}</span></>) : (<span className="text-zinc-400">Select country...</span>)}
                   </span>
                   <svg className={`h-4 w-4 text-zinc-400 transition-transform ${countryDropdownOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                 </button>
-                {countryDropdownOpen && (
-                  <div className="absolute z-50 mt-1 w-full max-h-60 overflow-hidden rounded-lg border border-white/20 bg-zinc-800/95 shadow-xl backdrop-blur-sm">
+                {countryDropdownOpen && createPortal(
+                  <div 
+                    ref={countryDropdownRef}
+                    style={{ 
+                      position: 'absolute', 
+                      top: `${dropdownCoords.top}px`, 
+                      left: `${dropdownCoords.left}px`, 
+                      width: `${dropdownCoords.width}px`,
+                      zIndex: 9999 
+                    }}
+                    className="mt-1 max-h-60 overflow-hidden rounded-lg border border-slate-200 dark:border-white/20 bg-white dark:bg-zinc-800/95 shadow-xl backdrop-blur-sm"
+                  >
                     <div className="sticky top-0 p-2 border-b border-white/10 bg-zinc-800/95">
                       <input type="text" placeholder="Search countries..." value={countrySearch} onChange={(e) => setCountrySearch(e.target.value)}
-                        className="w-full rounded-md border border-white/20 bg-zinc-700/90 px-3 py-1.5 text-sm text-zinc-50 outline-none placeholder:text-zinc-400 focus:border-sky-400/70" autoFocus />
+                        className="w-full rounded-md border border-slate-200 dark:border-white/20 bg-slate-50 dark:bg-zinc-700/90 px-3 py-1.5 text-sm text-slate-900 dark:text-zinc-50 outline-none placeholder:text-slate-400 dark:placeholder:text-zinc-400 focus:border-sky-400/70" autoFocus />
                     </div>
                     <div className="max-h-48 overflow-y-auto">
                       <button type="button" onClick={() => { setFormData((prev) => ({ ...prev, country: "" })); setCountryDropdownOpen(false); setCountrySearch(""); }}
-                        className={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2 transition ${!formData.country ? "bg-sky-500/20 text-sky-200" : "text-zinc-50"}`}>
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-white/10 flex items-center gap-2 transition ${!formData.country ? "bg-sky-500/10 text-sky-600 dark:bg-sky-500/20 dark:text-sky-200" : "text-slate-700 dark:text-zinc-50"}`}>
                         <span className="text-base">🌐</span><span>Any country</span>
                       </button>
                       {filteredCountries.map((country) => (
                         <button type="button" key={country.code}
                           onClick={() => { setFormData((prev) => ({ ...prev, country: country.code })); setCountryDropdownOpen(false); setCountrySearch(""); }}
-                          className={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2 transition ${formData.country === country.code ? "bg-sky-500/20 text-sky-200" : "text-zinc-50"}`}>
-                          <img src={`https://flagcdn.com/w20/${country.code.toLowerCase()}.png`} alt={country.name} className="h-4 w-5 object-cover rounded-sm" />
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-white/10 flex items-center gap-2 transition ${formData.country === country.code ? "bg-sky-500/10 text-sky-600 dark:bg-sky-500/20 dark:text-sky-200" : "text-slate-700 dark:text-zinc-50"}`}>
+                            <Image src={`https://flagcdn.com/w20/${country.code.toLowerCase()}.png`} alt={country.name} width={20} height={16} className="h-4 w-5 object-cover rounded-sm" />
                           <span>{country.name}</span>
                           <span className="ml-auto text-[10px] text-zinc-500">{country.code}</span>
                         </button>
                       ))}
                       {filteredCountries.length === 0 && (<div className="px-3 py-4 text-center text-sm text-zinc-400">No countries found</div>)}
                     </div>
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
               <div className="flex items-end justify-end gap-2">
@@ -1091,38 +1074,72 @@ export default function ClientSearchPage() {
             </div>
 
             <div className="mt-4 pt-4 border-t border-white/5 flex flex-col xl:flex-row xl:items-center gap-4 justify-between">
-              <div className="flex items-center">
+              <div className="flex flex-wrap items-center gap-3">
                 {isStatsLoading ? (
-                  <span className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 h-[30px] w-[140px] animate-pulse">
-                    <span className="h-1.5 w-1.5 rounded-full bg-zinc-600" />
-                    <span className="h-2 w-20 rounded bg-zinc-700" />
-                  </span>
+                  <div className="flex gap-2">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 h-[30px] w-[120px] animate-pulse" />
+                    <span className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-800/50 px-3 py-1.5 h-[30px] w-[120px] animate-pulse" />
+                  </div>
                 ) : (
-                  <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-bold ${
-                    searchAttemptsExhausted
-                      ? 'border-red-500/30 bg-red-500/10 text-red-400'
-                      : 'border-zinc-700 bg-zinc-800/80 text-zinc-300'
-                  }`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${searchAttemptsExhausted ? 'bg-red-400' : 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,1)]'}`} />
-                    {searchAttemptsUsed} / {maxSearchAttempts} searches used
-                  </span>
+                  <>
+                    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider ${
+                      searchAttemptsUsed >= maxSearchAttempts
+                        ? 'border-red-500/30 bg-red-500/5 text-red-600 dark:bg-red-500/10 dark:text-red-400'
+                        : 'border-slate-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800/80 text-slate-500 dark:text-zinc-300'
+                    }`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${searchAttemptsUsed >= maxSearchAttempts ? 'bg-red-400' : 'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,1)]'}`} />
+                      {Math.max(0, maxSearchAttempts - searchAttemptsUsed)} searches left
+                    </span>
+
+                    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider ${
+                      assignmentsUsed >= maxAssignments
+                        ? 'border-red-500/30 bg-red-500/5 text-red-600 dark:bg-red-500/10 dark:text-red-400'
+                        : 'border-slate-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-800/80 text-slate-500 dark:text-zinc-300'
+                    }`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${assignmentsUsed >= maxAssignments ? 'bg-red-400' : 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,1)]'}`} />
+                      {Math.max(0, maxAssignments - assignmentsUsed)} applications left
+                    </span>
+                    
+                    <div className="group/info relative">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 dark:border-zinc-700 bg-white/50 dark:bg-zinc-800/50 text-[10px] font-bold text-slate-400 dark:text-zinc-500 cursor-help hover:border-sky-400 hover:text-sky-400 transition-colors">
+                        i
+                      </span>
+                      <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 w-64 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3 text-[11px] leading-relaxed text-slate-600 dark:text-zinc-400 opacity-0 group-hover/info:opacity-100 transition-opacity shadow-xl z-50">
+                        <p className="font-bold text-slate-900 dark:text-zinc-100 mb-1">Quota Information</p>
+                        <ul className="space-y-1.5 list-disc pl-3">
+                          <li><span className="text-sky-500 font-bold">Searches</span>: Total times you can run a new job scan per week.</li>
+                          <li><span className="text-emerald-500 font-bold">Applications</span>: Total jobs the JA team will process and apply for you this week.</li>
+                        </ul>
+                      </div>
+                    </div>
+                    
+                    <p className="hidden text-[10px] text-zinc-500 xl:inline italic">
+                      Limits reset every Monday.
+                    </p>
+                  </>
                 )}
               </div>
 
               <div className="group relative">
                 <button
-                  onClick={() => { loading && activeService === selectedSource ? handleStopSearch() : selectedSource && handleSearch(selectedSource); }}
+                  onClick={() => {
+                    if (loading && activeService === selectedSource) {
+                      handleStopSearch();
+                    } else if (selectedSource) {
+                      handleSearch(selectedSource);
+                    }
+                  }}
                   disabled={(disabledSearch || !selectedSource) && !(loading && activeService)}
                   className={`w-full xl:w-auto inline-flex items-center justify-center gap-2 rounded-lg border px-8 py-2.5 text-sm font-semibold text-zinc-50 transition disabled:cursor-not-allowed disabled:opacity-50 ${
                     loading && activeService
-                      ? "border-red-400/60 bg-red-900/60 shadow-[0_10px_30px_rgba(127,29,29,0.75)] hover:border-red-400/80 hover:bg-red-900/70"
+                      ? "border-red-400/60 bg-red-600 dark:bg-red-900/60 shadow-[0_10px_30px_rgba(220,38,38,0.3)] hover:bg-red-700 dark:hover:bg-red-900/70"
                       : selectedSource === "jsearch"
-                      ? "border-sky-400/60 bg-slate-900/60 shadow-[0_10px_35px_rgba(56,189,248,0.85)] hover:border-sky-400/80 hover:bg-slate-900/70"
+                      ? "border-sky-400/60 bg-slate-900 dark:bg-slate-900/60 shadow-[0_10px_35px_rgba(56,189,248,0.4)] hover:bg-slate-800 dark:hover:bg-slate-900/70"
                       : selectedSource === "linkedin"
-                      ? "border-indigo-400/60 bg-slate-900/70 shadow-[0_10px_30px_rgba(30,64,175,0.75)] hover:border-violet-400/70 hover:bg-slate-900/80"
+                      ? "border-indigo-400/60 bg-slate-900 dark:bg-slate-900/70 shadow-[0_10px_30px_rgba(30,64,175,0.3)] hover:bg-slate-800 dark:hover:bg-slate-900/80"
                       : selectedSource === "indeed"
-                      ? "border-emerald-400/60 bg-slate-900/60 shadow-[0_10px_30px_rgba(6,95,70,0.85)] hover:border-emerald-400/80 hover:bg-slate-900/70"
-                      : "border-zinc-600 bg-zinc-800/60"
+                      ? "border-emerald-400/60 bg-slate-900 dark:bg-slate-900/60 shadow-[0_10px_30px_rgba(6,95,70,0.4)] hover:bg-slate-800 dark:hover:bg-slate-900/70"
+                      : "border-slate-300 dark:border-zinc-600 bg-slate-100 dark:bg-zinc-800/60 text-slate-400 dark:text-zinc-500"
                   }`}>
                   {loading && activeService ? (
                     <span className="inline-flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-red-400" /><span>Stop</span></span>
@@ -1143,85 +1160,76 @@ export default function ClientSearchPage() {
           </div>
         </div>
 
-        <aside className="subtle-card relative flex flex-col p-4 sm:p-5 lg:p-6 overflow-hidden lg:min-h-0 lg:h-full min-h-[500px]">
-          <div className="absolute inset-0 -z-10 rounded-[0.9rem] border border-white/5" />
+        <aside className={`subtle-card relative flex flex-col p-4 sm:p-5 lg:p-6 overflow-hidden lg:min-h-0 lg:h-full min-h-[500px] ${mobileTab === 'results' ? 'flex' : 'hidden lg:flex'}`}>
 
-          {!hasSearched || jobs.length === 0 ? (
-            <div className="flex flex-col h-full justify-between">
-              <div className="space-y-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
-                  Snapshot
-                </p>
-                <p className="text-balance text-sm text-zinc-100">
-                  Design your search like a professional: tighten your filters,
-                  compare stacks, and export a focused shortlist you can actually
-                  work through.
-                </p>
-
-                <div className="mt-4 grid gap-3 text-[11px] text-zinc-300">
-                  <div className="flex items-start justify-between rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-2.5">
-                    <div>
-                      <p className="font-semibold text-zinc-100">
-                        Search confidence
-                      </p>
-                      <p className="mt-1 text-[11px] text-zinc-400">
-                        Layer multiple filters to avoid generic listings.
-                      </p>
-                    </div>
-                    <span className="ml-3 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                      Recommended
-                    </span>
-                  </div>
-
-                  <div className="flex items-start justify-between rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-2.5">
-                    <div>
-                      <p className="font-semibold text-zinc-100">
-                        Three engines, one UI
-                      </p>
-                      <p className="mt-1 text-[11px] text-zinc-400">
-                        Compare each engine&apos;s results for the same role.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start justify-between rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-2.5">
-                    <div>
-                      <p className="font-semibold text-zinc-100">
-                        CSV as source-of-truth
-                      </p>
-                      <p className="mt-1 text-[11px] text-zinc-400">
-                        Export once, track outreach in your own system.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 flex items-center justify-between rounded-xl border border-zinc-700/80 bg-zinc-900/80 px-3.5 py-2.5 text-[11px] text-zinc-300">
-                <div className="space-y-0.5">
-                  <p className="font-semibold text-zinc-100">
-                    No active results yet
-                  </p>
-                  <p className="text-[10px] text-zinc-400">
-                    Run a search to see live opportunities here.
-                  </p>
-                </div>
-
-                <button
-                  onClick={downloadCsv}
-                  disabled={!jobs.length}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/60 bg-emerald-500/15 px-3 py-1.5 text-[11px] font-semibold text-emerald-200 shadow-[0_10px_25px_rgba(6,78,59,0.7)] transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:border-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-400"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                  <span className="cursor-pointer">Download CSV</span>
-                </button>
-              </div>
+          <div className="flex flex-col h-full lg:min-h-0">
+            <div className="mb-4 flex items-center justify-between border-b border-slate-200/60 dark:border-white/5 pb-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                {jobs.length > 0 ? "Active Results" : "Recent History"}
+              </p>
+              {searchHistory.length > 0 && jobs.length === 0 && (
+                <span className="text-[10px] font-medium text-zinc-500">{searchHistory.length} saved</span>
+              )}
             </div>
-          ) : (
-            <div className="flex flex-col h-full lg:min-h-0">
-              <div className="mb-4 flex items-center justify-between border-b border-white/5 pb-4">
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 -mr-1">
+              {!hasSearched || jobs.length === 0 ? (
+                <div className="space-y-3">
+                  {searchHistory.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800 p-8 text-center">
+                      <p className="text-xs text-zinc-400 italic">No search history available yet.</p>
+                      <p className="text-[10px] text-zinc-500 mt-2">Your recent searches will appear here for quick access.</p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-2.5">
+                      {searchHistory.map((item) => (
+                        <div key={item.id} className="group relative rounded-xl border border-slate-200 dark:border-zinc-800/80 bg-white/50 dark:bg-zinc-900/40 p-3.5 transition hover:border-emerald-500/30 hover:bg-white dark:hover:bg-zinc-900/60 shadow-sm">
+                           <div className="flex flex-col gap-2">
+                             <div className="flex items-start justify-between gap-3">
+                               <h4 className="text-[13px] font-bold text-slate-800 dark:text-zinc-200 line-clamp-1">{item.formData.jobTitle || "Untitled Search"}</h4>
+                               <span className="shrink-0 text-[8px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded uppercase tracking-wider">{item.service}</span>
+                             </div>
+                             <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                                  <span>{item.formData.city || "Remote"}</span>
+                                  <span>•</span>
+                                  <span>{item.jobs?.length || 0} roles</span>
+                                </div>
+                                <button 
+                                  onClick={() => restoreFromHistory(item)}
+                                  className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                                >
+                                  Restore
+                                </button>
+                             </div>
+                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Minimized Tips */}
+                  {searchHistory.length > 0 && (
+                    <div className="mt-8 pt-6 border-t border-slate-200 dark:border-zinc-800/50">
+                       <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3">Search Tips</p>
+                       <div className="space-y-3 opacity-60">
+                          <div className="flex gap-3">
+                             <div className="w-1 h-1 rounded-full bg-sky-500 mt-1.5" />
+                             <p className="text-[11px] text-slate-600 dark:text-zinc-400 italic leading-relaxed">Layer multiple filters to avoid generic listings and find high-quality leads.</p>
+                          </div>
+                          <div className="flex gap-3">
+                             <div className="w-1 h-1 rounded-full bg-emerald-500 mt-1.5" />
+                             <p className="text-[11px] text-slate-600 dark:text-zinc-400 italic leading-relaxed">Export results to CSV to maintain a persistent record of your search runs.</p>
+                          </div>
+                       </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="mb-4 flex items-center justify-between border-b border-white/5 pb-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-zinc-50">
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-zinc-50">
                     {jobs.length} matching {jobs.length === 1 ? "role" : "roles"}
                   </h2>
                   <p className="text-[11px] text-zinc-400 mt-0.5">
@@ -1232,7 +1240,7 @@ export default function ClientSearchPage() {
                 </div>
                 
                 <div className="text-right">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700/80 bg-zinc-800/80 px-2.5 py-1 text-[11px] font-medium text-zinc-300">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 dark:border-zinc-700/80 bg-slate-50 dark:bg-zinc-800/80 px-2.5 py-1 text-[11px] font-medium text-slate-500 dark:text-zinc-300">
                     <span className={`h-1.5 w-1.5 rounded-full ${assignmentsUsed >= maxAssignments ? 'bg-red-400' : 'bg-emerald-400'}`} />
                     {assignmentsUsed} / {maxAssignments} assigned this week
                   </span>
@@ -1243,15 +1251,15 @@ export default function ClientSearchPage() {
                 {jobs.map((job: Job) => (
                   <article
                     key={job.id}
-                    className="group flex flex-col justify-between rounded-xl border border-zinc-700/80 bg-zinc-950/80 p-4 text-sm text-zinc-200 shadow-md transition hover:-translate-y-0.5 hover:border-sky-400/50"
+                    className="group flex flex-col justify-between rounded-xl border border-slate-200 dark:border-zinc-700/80 bg-white dark:bg-zinc-950/80 p-4 text-sm text-slate-700 dark:text-zinc-200 shadow-sm dark:shadow-md transition hover:-translate-y-0.5 hover:border-sky-400/50"
                   >
                     <div>
                       <div className="mb-2 flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="line-clamp-2 text-sm font-semibold text-zinc-50">
+                          <h3 className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-zinc-50">
                             {job.title || "Untitled role"}
                           </h3>
-                          <p className="mt-0.5 text-[12px] text-zinc-300">
+                          <p className="mt-0.5 text-[12px] text-slate-500 dark:text-zinc-300">
                             {job.company || "Company not specified"}
                           </p>
                         </div>
@@ -1271,17 +1279,17 @@ export default function ClientSearchPage() {
 
                       <div className="mb-3 flex flex-wrap gap-1.5 text-[10px] text-zinc-300">
                         {job.location && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900/80 px-2 py-0.5">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-zinc-900/80 px-2 py-0.5">
                             📍 {job.location}
                           </span>
                         )}
                         {job.salary && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900/80 px-2 py-0.5">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-zinc-900/80 px-2 py-0.5">
                             💰 {job.salary}
                           </span>
                         )}
                         {job.remote && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-300 px-2 py-0.5">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 px-2 py-0.5">
                             Remote
                           </span>
                         )}
@@ -1297,7 +1305,7 @@ export default function ClientSearchPage() {
                       </div>
                     )}
 
-                    <div className="mt-2 flex items-center justify-between pt-3 border-t border-zinc-800/60">
+                    <div className="mt-2 flex items-center justify-between pt-3 border-t border-slate-100 dark:border-zinc-800/60">
                       {job.applyLink ? (
                         <a
                           href={job.applyLink}
@@ -1316,26 +1324,26 @@ export default function ClientSearchPage() {
                         onClick={() => handleAssignToJA(job)}
                         className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-semibold transition ${
                           assignedJobIds.has(jobKey(job))
-                            ? "bg-emerald-900/30 border border-emerald-400/30 text-emerald-400 cursor-default"
+                            ? "bg-emerald-100/50 dark:bg-emerald-900/30 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 cursor-default"
                             : assignmentsUsed >= maxAssignments
-                            ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                            : "border border-emerald-400/60 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 hover:border-emerald-400"
+                            ? "bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500 cursor-not-allowed"
+                            : "border border-emerald-400/60 bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 hover:bg-emerald-500/20 dark:hover:bg-emerald-500/25 hover:border-emerald-400"
                         }`}
                       >
                         {assigningJobId === job.id ? (
                           <>
                             <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
-                            Requesting...
+                            Adding...
                           </>
                         ) : assignedJobIds.has(jobKey(job)) ? (
                           <>
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                            Assigned ✓
+                            In Pipeline ✓
                           </>
                         ) : (
                           <>
                             <span className={`h-1.5 w-1.5 rounded-full ${assignmentsUsed >= maxAssignments ? 'bg-zinc-500' : 'bg-emerald-400'}`} />
-                            Assign to JA
+                            Add to Pipeline
                           </>
                         )}
                       </button>
@@ -1354,12 +1362,13 @@ export default function ClientSearchPage() {
               </div>
             </div>
           )}
+        </div>
+      </div>
         </aside>
       </section>
-      )}
 
       {error && (
-        <div className="rounded-xl border border-red-500/30 bg-red-950/60 px-4 py-3 text-sm text-red-200 shadow-[0_15px_35px_rgba(127,29,29,0.65)] sm:px-5">
+        <div className="rounded-xl border border-red-500/30 bg-red-50 dark:bg-red-950/60 px-4 py-3 text-sm text-red-600 dark:text-red-200 shadow-md sm:px-5">
           {error}
         </div>
       )}
@@ -1368,10 +1377,10 @@ export default function ClientSearchPage() {
         <div
           className={`rounded-xl border px-4 py-3 text-sm shadow-[0_15px_35px_rgba(0,0,0,0.65)] sm:px-5 ${
             activeService === "indeed"
-              ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-200"
+              ? "border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-200"
               : activeService === "jsearch"
-              ? "border-sky-500/30 bg-sky-950/20 text-sky-200"
-              : "border-blue-500/30 bg-blue-950/20 text-blue-200"
+              ? "border-sky-500/30 bg-sky-50 dark:bg-sky-950/20 text-sky-600 dark:text-sky-200"
+              : "border-blue-500/30 bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-200"
           }`}
         >
           <div className="flex items-center gap-3">

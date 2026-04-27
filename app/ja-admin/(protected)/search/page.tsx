@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useLayoutEffect, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
+import Image from "next/image";
 import { Toast } from "../../../components/Toast";
 
 interface Job {
@@ -80,7 +82,8 @@ const COUNTRIES: Country[] = [
 ];
 
 export default function AdminSearchPage() {
-  const [activeTab, setActiveTab] = useState<'search' | 'history'>('search');
+  const [sidebarTab, setSidebarTab] = useState<'results' | 'history'>('history');
+  const [mobileTab, setMobileTab] = useState<'search' | 'results' | 'history'>('search');
 
   const [formData, setFormData] = useState<FormData>({
     jobTitle: "", industry: "", salaryMin: "", salaryMax: "",
@@ -92,7 +95,6 @@ export default function AdminSearchPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasSearched, setHasSearched] = useState(false);
   const [activeService, setActiveService] = useState<"jsearch" | "indeed" | "linkedin" | null>(null);
   const [searchProgress, setSearchProgress] = useState<{ count: number; maxResults: number; status: string } | null>(null);
   const [indeedRunId, setIndeedRunId] = useState<string | null>(null);
@@ -139,7 +141,17 @@ export default function AdminSearchPage() {
           const histData = await histRes.json();
           const backendHistory = Array.isArray(histData) ? histData : histData?.data ?? [];
           if (backendHistory.length > 0) {
-            const normalizedBackend = backendHistory.map((h: any) => ({
+            interface HistoryItem {
+              id?: string;
+              query_params?: Record<string, unknown>;
+              formData?: Record<string, unknown>;
+              results_preview?: unknown[];
+              jobs?: unknown[];
+              service?: string;
+              timestamp?: string | number;
+              created_at?: string | number;
+            }
+            const normalizedBackend = backendHistory.map((h: HistoryItem) => ({
               id: h.id || Math.random().toString(),
               formData: h.query_params || h.formData || {},
               jobs: h.results_preview || h.jobs || [],
@@ -190,25 +202,39 @@ export default function AdminSearchPage() {
     })();
   };
 
-  const restoreFromHistory = (item: any) => {
+  const restoreFromHistory = (item: { formData: FormData; jobs: Job[]; service: string }) => {
     setFormData(item.formData);
     setJobs(item.jobs);
-    setActiveService(item.service as any);
+    setActiveService(item.service as "jsearch" | "indeed" | "linkedin");
     setSearchProgress(null);
     setLoading(false);
-    setHasSearched(true);
     localStorage.setItem("tjh_admin_search_cache", JSON.stringify({ jobs: item.jobs, service: item.service, formData: item.formData }));
+    setSidebarTab('results');
   };
 
   // Country dropdown state
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
   const countryDropdownRef = useRef<HTMLDivElement>(null);
+  const countryTriggerRef = useRef<HTMLButtonElement>(null);
+  const [dropdownCoords, setDropdownCoords] = useState({ top: 0, left: 0, width: 0 });
   const selectedCountry = COUNTRIES.find((c) => c.code === formData.country);
   const filteredCountries = COUNTRIES.filter((country) =>
     country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
     country.code.toLowerCase().includes(countrySearch.toLowerCase())
   );
+
+  // Position the portal dropdown
+  useLayoutEffect(() => {
+    if (countryDropdownOpen && countryTriggerRef.current) {
+      const rect = countryTriggerRef.current.getBoundingClientRect();
+      setDropdownCoords({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width
+      });
+    }
+  }, [countryDropdownOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -342,8 +368,10 @@ export default function AdminSearchPage() {
                   const finalJobs = data.jobs || [];
                   setJobs(finalJobs);
                   setSearchProgress(null);
-                  setHasSearched(true);
-                  if (finalJobs.length > 0) updateCache(finalJobs, service, formData);
+                  if (finalJobs.length > 0) {
+                    updateCache(finalJobs, service, formData);
+                    setSidebarTab('results');
+                  }
                   if (finalJobs.length === 0) setError("No jobs found. Try adjusting your search criteria.");
                 } else if (data.type === "error") {
                   streamError = new Error(data.message || "An error occurred");
@@ -383,61 +411,18 @@ export default function AdminSearchPage() {
   const disabledSearch = loading || !formData.jobTitle.trim();
 
   return (
-    <div className="mx-auto flex lg:h-[calc(100vh-104px)] min-h-[calc(100vh-104px)] max-w-[1600px] flex-col gap-6">
+    <div className="mx-auto flex lg:h-[calc(100vh-104px)] min-h-[calc(100vh-104px)] max-w-[1600px] flex-col gap-4 sm:gap-6">
 
-      {/* Tab Navigation */}
-      <div className="mb-2 flex space-x-6 border-b border-zinc-800/60 pb-1">
-        <button
-          onClick={() => setActiveTab('search')}
-          className={`pb-3 text-sm font-semibold transition border-b-2 ${activeTab === 'search' ? 'border-violet-400 text-violet-400' : 'border-transparent text-zinc-400 hover:text-zinc-200'}`}
-        >
-          New Search
-        </button>
-        <button
-          onClick={() => setActiveTab('history')}
-          className={`pb-3 text-sm font-semibold transition border-b-2 ${activeTab === 'history' ? 'border-violet-400 text-violet-400' : 'border-transparent text-zinc-400 hover:text-zinc-200'}`}
-        >
-          Search History
-        </button>
+      {/* Mobile Tab Navigator */}
+      <div className="lg:hidden flex items-center bg-zinc-900/60 p-1 rounded-2xl border border-zinc-800/50 mx-4 shrink-0">
+        <button onClick={() => setMobileTab("search")} className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mobileTab === "search" ? "bg-violet-600 text-white shadow-lg" : "text-zinc-500"}`}>Search</button>
+        <button onClick={() => { setMobileTab("results"); setSidebarTab("results"); }} className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mobileTab === "results" ? "bg-violet-600 text-white shadow-lg" : "text-zinc-500"}`}>Results ({jobs.length})</button>
+        <button onClick={() => { setMobileTab("history"); setSidebarTab("history"); }} className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mobileTab === "history" ? "bg-violet-600 text-white shadow-lg" : "text-zinc-500"}`}>History</button>
       </div>
 
-      {activeTab === 'history' ? (
-        <section className="flex flex-col gap-4 lg:overflow-y-auto pr-2 lg:min-h-0">
-          {searchHistory.length === 0 ? (
-            <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-8 text-center text-zinc-400 text-sm">
-              No search history available yet.
-            </div>
-          ) : (
-            searchHistory.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-zinc-800/60 bg-zinc-900/40 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6 transition hover:border-violet-500/30">
-                <div>
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-xl font-bold text-zinc-200">{item.formData.jobTitle || "Untitled Search"}</h3>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-zinc-700 bg-zinc-800/60 px-2.5 py-0.5 text-[10px] text-zinc-300">
-                      {item.service}
-                    </span>
-                  </div>
-                  <p className="text-sm text-zinc-400">
-                    {item.formData.city || "Remote"} • {item.jobs?.length || 0} matching roles
-                  </p>
-                  <p className="text-xs text-zinc-500 mt-3">
-                    Searched at {new Date(item.timestamp).toLocaleString()}
-                  </p>
-                </div>
-                <button
-                  onClick={() => { restoreFromHistory(item); setActiveTab('search'); }}
-                  className="shrink-0 rounded-lg bg-violet-500/10 border border-violet-500/20 px-6 py-3 text-sm font-bold text-violet-400 transition hover:bg-violet-500/20 hover:border-violet-500/40"
-                >
-                  Restore Results
-                </button>
-              </div>
-            ))
-          )}
-        </section>
-      ) : (
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-stretch lg:min-h-0 flex-1">
-          <div className="rounded-2xl border border-zinc-800/60 bg-zinc-900/40 relative p-6 sm:p-8 flex flex-col lg:overflow-y-auto pr-2 sm:pr-4">
-            <div className="pointer-events-none absolute inset-0 -z-10 rounded-[1.25rem] border border-white/10" />
+      {/* Main Content Area */}
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-stretch lg:min-h-0 flex-1">
+        <div className={`rounded-2xl border border-zinc-800/60 bg-zinc-900/40 relative p-4 sm:p-8 flex flex-col lg:overflow-y-auto pr-2 sm:pr-4 ${mobileTab === 'search' ? 'flex' : 'hidden lg:flex'}`}>
 
             <div className="mb-6 flex items-center gap-3 text-xs text-zinc-400">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1">
@@ -461,7 +446,7 @@ export default function AdminSearchPage() {
                     </span>
                   </h1>
                   <p className="max-w-xl text-sm leading-relaxed text-zinc-400 sm:text-base">
-                    Search across multiple platforms simultaneously. Surface roles by skills, salary, and location—without the noise.
+                    Search across multiple platforms simultaneously. Surface roles by skills, salary, and location&mdash;without the noise.
                   </p>
                 </div>
               </div>
@@ -469,7 +454,7 @@ export default function AdminSearchPage() {
 
 
             {/* Source Selector */}
-            <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
+            <div className="mb-8 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
               <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Step 1 — Select search source</p>
               <div className="grid grid-cols-3 gap-2">
                 {([
@@ -514,7 +499,7 @@ export default function AdminSearchPage() {
                 <div className="space-y-3">
                   <label htmlFor="jobTitle" className="flex items-center justify-between text-xs font-medium text-zinc-200">
                     <span>Role or title *</span>
-                    <span className="text-[11px] text-zinc-400">Try &ldquo;Senior Backend Engineer&rdquo;</span>
+                    <span className="text-[11px] text-zinc-400">Try &quot;Senior Backend Engineer&quot;</span>
                   </label>
                   <input type="text" id="jobTitle" name="jobTitle" value={formData.jobTitle} onChange={handleInputChange}
                     placeholder="e.g., Staff Frontend Engineer"
@@ -594,14 +579,14 @@ export default function AdminSearchPage() {
                     className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-zinc-50 outline-none ring-0 transition focus:border-violet-400/70 focus:ring-2 focus:ring-violet-500/50"
                   />
                 </div>
-                <div className="space-y-2.5 relative" ref={countryDropdownRef}>
+                <div className="space-y-2.5 relative">
                   <label htmlFor="country" className="block text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">Country / region</label>
-                  <button type="button" id="country" onClick={() => setCountryDropdownOpen(!countryDropdownOpen)}
+                  <button type="button" id="country" ref={countryTriggerRef} onClick={() => setCountryDropdownOpen(!countryDropdownOpen)}
                     className="w-full rounded-lg border border-white/30 bg-zinc-700/90 px-3 py-2 text-sm text-left text-zinc-50 outline-none ring-0 transition focus:border-violet-400/70 focus:ring-2 focus:ring-violet-500/50 flex items-center justify-between gap-2">
                     <span className="flex items-center gap-2 truncate">
                       {selectedCountry ? (
                         <>
-                          <img src={`https://flagcdn.com/w20/${selectedCountry.code.toLowerCase()}.png`} alt={selectedCountry.name} className="h-4 w-5 object-cover rounded-sm" />
+                          <Image src={`https://flagcdn.com/w20/${selectedCountry.code.toLowerCase()}.png`} alt={selectedCountry.name} width={20} height={16} className="h-4 w-5 object-cover rounded-sm" />
                           <span>{selectedCountry.name}</span>
                         </>
                       ) : (
@@ -612,8 +597,18 @@ export default function AdminSearchPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
-                  {countryDropdownOpen && (
-                    <div className="absolute z-50 mt-1 w-full max-h-60 overflow-hidden rounded-lg border border-white/20 bg-zinc-800/95 shadow-xl backdrop-blur-sm">
+                  {countryDropdownOpen && createPortal(
+                    <div 
+                      ref={countryDropdownRef}
+                      style={{ 
+                        position: 'absolute', 
+                        top: `${dropdownCoords.top}px`, 
+                        left: `${dropdownCoords.left}px`, 
+                        width: `${dropdownCoords.width}px`,
+                        zIndex: 9999 
+                      }}
+                      className="mt-1 max-h-60 overflow-hidden rounded-lg border border-white/20 bg-zinc-800/95 shadow-xl backdrop-blur-sm"
+                    >
                       <div className="sticky top-0 p-2 border-b border-white/10 bg-zinc-800/95">
                         <input type="text" placeholder="Search countries..." value={countrySearch} onChange={(e) => setCountrySearch(e.target.value)}
                           className="w-full rounded-md border border-white/20 bg-zinc-700/90 px-3 py-1.5 text-sm text-zinc-50 outline-none placeholder:text-zinc-400 focus:border-violet-400/70"
@@ -629,7 +624,7 @@ export default function AdminSearchPage() {
                           <button type="button" key={country.code}
                             onClick={() => { setFormData((prev) => ({ ...prev, country: country.code })); setCountryDropdownOpen(false); setCountrySearch(""); }}
                             className={`w-full px-3 py-2 text-left text-sm hover:bg-white/10 flex items-center gap-2 transition ${formData.country === country.code ? "bg-violet-500/20 text-violet-200" : "text-zinc-50"}`}>
-                            <img src={`https://flagcdn.com/w20/${country.code.toLowerCase()}.png`} alt={country.name} className="h-4 w-5 object-cover rounded-sm" />
+                            <Image src={`https://flagcdn.com/w20/${country.code.toLowerCase()}.png`} alt={country.name} width={20} height={16} className="h-4 w-5 object-cover rounded-sm" />
                             <span>{country.name}</span>
                             <span className="ml-auto text-[10px] text-zinc-500">{country.code}</span>
                           </button>
@@ -638,7 +633,8 @@ export default function AdminSearchPage() {
                           <div className="px-3 py-4 text-center text-sm text-zinc-400">No countries found</div>
                         )}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </div>
                 <div className="flex items-end justify-end gap-2">
@@ -778,52 +774,83 @@ export default function AdminSearchPage() {
             </div>
           </div>
 
-          <aside className="rounded-2xl border border-zinc-800/60 bg-zinc-900/40 relative flex flex-col p-4 sm:p-5 lg:p-6 overflow-hidden lg:min-h-0 lg:h-full min-h-[500px]">
-            <div className="absolute inset-0 -z-10 rounded-[0.9rem] border border-white/5" />
+          <aside className={`rounded-2xl border border-zinc-800/60 bg-zinc-900/40 relative flex flex-col p-4 sm:p-5 lg:p-6 overflow-hidden lg:min-h-0 lg:h-full min-h-[500px] ${mobileTab !== 'search' ? 'flex' : 'hidden lg:flex'}`}>
 
-            {!hasSearched || jobs.length === 0 ? (
-              <div className="flex flex-col h-full justify-between">
-                <div className="space-y-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Snapshot</p>
-                  <p className="text-balance text-sm text-zinc-100">
-                    Design your search like a professional: tighten your filters, compare stacks, and export a focused shortlist you can actually work through.
-                  </p>
-                  <div className="mt-4 grid gap-3 text-[11px] text-zinc-300">
-                    <div className="flex items-start justify-between rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-2.5">
-                      <div>
-                        <p className="font-semibold text-zinc-100">Unlimited access</p>
-                        <p className="mt-1 text-[11px] text-zinc-400">No search or export limits for admin accounts.</p>
-                      </div>
-                      <span className="ml-3 rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-300">Admin</span>
-                    </div>
-                    <div className="flex items-start justify-between rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-2.5">
-                      <div>
-                        <p className="font-semibold text-zinc-100">Three engines, one UI</p>
-                        <p className="mt-1 text-[11px] text-zinc-400">Compare each engine&apos;s results for the same role.</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start justify-between rounded-lg border border-zinc-700/80 bg-zinc-900/70 px-3 py-2.5">
-                      <div>
-                        <p className="font-semibold text-zinc-100">CSV as source-of-truth</p>
-                        <p className="mt-1 text-[11px] text-zinc-400">Export once, track outreach in your own system.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-6 flex items-center justify-between rounded-xl border border-zinc-700/80 bg-zinc-900/80 px-3.5 py-2.5 text-[11px] text-zinc-300">
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-zinc-100">No active results yet</p>
-                    <p className="text-[10px] text-zinc-400">Run a search to see live opportunities here.</p>
-                  </div>
-                  <button onClick={downloadCsv} disabled={!jobs.length}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-violet-400/60 bg-violet-500/15 px-3 py-1.5 text-[11px] font-semibold text-violet-200 shadow-[0_10px_25px_rgba(91,33,182,0.5)] transition hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:border-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-300" />
-                    <span>Download CSV</span>
+            <div className="flex flex-col h-full lg:min-h-0">
+              <div className="mb-4 flex items-center justify-between border-b border-white/5 pb-2">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setSidebarTab('history')}
+                    className={`pb-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-colors ${sidebarTab === 'history' ? 'text-violet-400 border-b-2 border-violet-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    History
                   </button>
+                  {jobs.length > 0 && (
+                    <button
+                      onClick={() => setSidebarTab('results')}
+                      className={`pb-2 text-[11px] font-bold uppercase tracking-[0.18em] transition-colors ${sidebarTab === 'results' ? 'text-violet-400 border-b-2 border-violet-400' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      Results
+                    </button>
+                  )}
                 </div>
+                {searchHistory.length > 0 && sidebarTab === 'history' && (
+                  <span className="text-[10px] font-medium text-zinc-500">{searchHistory.length} saved</span>
+                )}
               </div>
-            ) : (
-              <div className="flex flex-col h-full lg:min-h-0">
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 -mr-1">
+                {sidebarTab === 'history' || jobs.length === 0 ? (
+                  <div className="space-y-3">
+                    {searchHistory.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-zinc-800 p-8 text-center">
+                        <p className="text-xs text-zinc-400 italic">No search history available yet.</p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-2.5">
+                        {searchHistory.map((item) => (
+                          <div key={item.id} className="group relative rounded-xl border border-zinc-800/40 bg-white/5 dark:bg-black/20 p-3.5 transition hover:border-violet-500/30 hover:bg-violet-500/5 shadow-sm">
+                             <div className="flex flex-col gap-2">
+                               <div className="flex items-start justify-between gap-3">
+                                 <h4 className="text-[13px] font-bold text-zinc-100 line-clamp-1">{item.formData.jobTitle || "Untitled Search"}</h4>
+                                 <span className="shrink-0 text-[8px] font-bold text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded uppercase tracking-wider">{item.service}</span>
+                               </div>
+                               <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                                    <span>{item.formData.city || "Remote"}</span>
+                                    <span>•</span>
+                                    <span>{item.jobs?.length || 0} roles</span>
+                                  </div>
+                                  <button 
+                                    onClick={() => restoreFromHistory(item)}
+                                    className="text-[11px] font-bold text-violet-400 hover:text-violet-300 transition-colors"
+                                  >
+                                    Restore
+                                  </button>
+                               </div>
+                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Admin Tips */}
+                    <div className="mt-8 pt-6 border-t border-zinc-800/50">
+                       <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3">Snapshot Insights</p>
+                       <div className="space-y-3 opacity-60">
+                          <div className="flex gap-3">
+                             <div className="w-1 h-1 rounded-full bg-violet-500 mt-1.5" />
+                             <p className="text-[11px] text-zinc-400 italic leading-relaxed">Unlimited admin access enabled. Export large datasets to CSV without quotas.</p>
+                          </div>
+                          <div className="flex gap-3">
+                             <div className="w-1 h-1 rounded-full bg-fuchsia-500 mt-1.5" />
+                             <p className="text-[11px] text-zinc-400 italic leading-relaxed">Compare multiple search sources to verify data consistency for clients.</p>
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
                 <div className="mb-4 flex items-center justify-between border-b border-white/5 pb-4">
                   <div>
                     <h2 className="text-lg font-semibold text-zinc-50">
@@ -886,12 +913,13 @@ export default function AdminSearchPage() {
                   <button onClick={downloadCsv} className="text-[11px] text-zinc-400 hover:text-zinc-200 transition">
                     Download CSV Backup
                   </button>
+                  </div>
                 </div>
+              )}
               </div>
-            )}
+            </div>
           </aside>
         </section>
-      )}
 
       {error && (
         <div className="rounded-xl border border-red-500/30 bg-red-950/60 px-4 py-3 text-sm text-red-200 shadow-[0_15px_35px_rgba(127,29,29,0.65)] sm:px-5">
