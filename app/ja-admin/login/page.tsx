@@ -28,6 +28,7 @@ export default function JaAdminLoginPage() {
       const res = await fetch("/api/ja-admin/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
 

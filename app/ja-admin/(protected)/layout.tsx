@@ -21,11 +21,18 @@ export default function JaAdminProtectedLayout({ children }: { children: React.R
     if (!isMounted) return;
 
     const authed = isJaAuthenticated();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsAuthed(authed);
-    if (!authed) {
-      router.push("/ja-admin/login");
-    }
+    const checkAuth = () => {
+      const authed = isJaAuthenticated();
+      console.log(`[JA Layout] Auth Check: ${authed ? "Authenticated" : "Not Authenticated"}`);
+      setIsAuthed(authed);
+      setIsMounted(true);
+      if (!authed) {
+        console.log("[JA Layout] Redirecting to login...");
+        router.push("/ja-admin/login");
+      }
+    };
+
+    checkAuth();
 
     const handleStorage = () => {
       const stillAuthed = isJaAuthenticated();
@@ -35,6 +42,7 @@ export default function JaAdminProtectedLayout({ children }: { children: React.R
     window.addEventListener("storage", handleStorage);
 
     const handleUnauthorized = () => {
+      console.warn("[JA Layout] auth:unauthorized event received! Kicking to login...");
       clearJaToken();
       setIsAuthed(false);
       router.push("/ja-admin/login");
@@ -56,8 +64,10 @@ export default function JaAdminProtectedLayout({ children }: { children: React.R
     );
   }
 
+  // If we are mounted but not authed, the useEffect will handle the redirect.
+  // We should still show a loader while isAuthed is being determined if needed,
+  // but since we check it on the same tick as isMounted = true, it should be fast.
   if (!isAuthed) {
-    router.push("/ja-admin/login");
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-950">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-800 border-t-violet-300" />

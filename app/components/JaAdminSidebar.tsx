@@ -16,7 +16,12 @@ export default function JaAdminSidebar({ isOpen = false, onClose = () => { } }: 
     setUser(getJaUser());
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/ja-admin/auth/logout", { method: "POST" });
+    } catch {
+      // Ignore network errors — always clear local state
+    }
     clearJaToken();
     router.push("/ja-admin/login");
   };

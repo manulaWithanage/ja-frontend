@@ -43,6 +43,8 @@ export async function proxyRequest(
   const fullPath = `${backendPath}${search}`;
 
   try {
+    console.log(`[JA Proxy] ${method} ${fullPath} | Cookies: ${cookieHeader ? "Present" : "Missing"}`);
+    
     const res = await fetch(`${BACKEND_URL}${fullPath}`, {
       method,
       headers,
@@ -50,11 +52,37 @@ export async function proxyRequest(
       signal: AbortSignal.timeout(timeout),
     });
 
+    console.log(`[JA Proxy] Backend responded with ${res.status}`);
+
     // Extract headers to pass back
     const responseHeaders = new Headers();
-    const setCookie = res.headers.get("set-cookie");
-    if (setCookie) {
-      responseHeaders.set("set-cookie", setCookie);
+    
+    // Correctly handle multiple Set-Cookie headers using all available methods
+    const rawCookies = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
+    
+    if (rawCookies.length > 0) {
+      rawCookies.forEach(cookie => {
+        let cookieValue = cookie;
+        if (process.env.NODE_ENV !== "production" || BACKEND_URL.includes("localhost")) {
+          cookieValue = cookie.replace(/;\s*Secure/gi, "");
+        }
+        responseHeaders.append("set-cookie", cookieValue);
+      });
+    } else {
+      // Fallback for older Node versions
+      const setCookie = res.headers.get("set-cookie");
+      if (setCookie) {
+        // res.headers.get joins multiple set-cookies with a comma, which is technically invalid for set-cookie
+        // but we'll try to split them if they look like multiple cookies
+        const individualCookies = setCookie.split(/,(?=[^;]+=[^;]+(?:;|$))/);
+        individualCookies.forEach(cookie => {
+          let cookieValue = cookie.trim();
+          if (process.env.NODE_ENV !== "production" || BACKEND_URL.includes("localhost")) {
+            cookieValue = cookieValue.replace(/;\s*Secure/gi, "");
+          }
+          responseHeaders.append("set-cookie", cookieValue);
+        });
+      }
     }
     responseHeaders.set("Content-Type", "application/json");
 
@@ -66,6 +94,7 @@ export async function proxyRequest(
     const data = await res.json();
 
     if (!res.ok) {
+      console.warn(`[JA Proxy] Backend error ${res.status}:`, data);
       return NextResponse.json(
         { error: data.detail || data.error || "Backend request failed" },
         { status: res.status, headers: responseHeaders }

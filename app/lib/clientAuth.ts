@@ -28,6 +28,6 @@ export function clearClientToken(): void {
 }
 
 export function isClientAuthenticated(): boolean {
-  if (typeof window === "undefined") return true;
+  if (typeof window === "undefined") return false;
   return localStorage.getItem(LOGGED_IN_KEY) === "true";
 }

@@ -1,7 +1,7 @@
 // ─── Admin Auth Helpers ──────────────────────────────────────
 // Now uses HttpOnly cookies managed by the browser.
 
-const ADMIN_LOGGED_IN_KEY = "ja_admin_is_logged_in";
+const ADMIN_LOGGED_IN_KEY = "hr_portal_logged_in";
 
 export function getAdminToken(): string | null {
   // We can no longer read the token from JS if it is HttpOnly.

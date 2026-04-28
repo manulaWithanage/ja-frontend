@@ -1,7 +1,7 @@
 // ─── JA Internal Admin Auth Helpers ─────────────────────────
 // Now uses HttpOnly cookies managed by the browser.
 
-const JA_LOGGED_IN_KEY = "ja_admin_is_logged_in";
+const JA_LOGGED_IN_KEY = "ja_admin_portal_logged_in";
 const JA_USER_KEY = "ja_user";
 
 export interface JaUser {
@@ -44,6 +44,6 @@ export function clearJaToken(): void {
 }
 
 export function isJaAuthenticated(): boolean {
-  if (typeof window === "undefined") return true;
+  if (typeof window === "undefined") return false;
   return localStorage.getItem(JA_LOGGED_IN_KEY) === "true";
 }
